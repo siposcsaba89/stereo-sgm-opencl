@@ -1,9 +1,12 @@
 #include "stereo-sgm.h"
 #include <vector>
 #include <assert.h>
+#include <fstream>
 
+std::string cl_file_name = "sgm-program.cl";
 int platform_index = 1;
 int device_index = 0;
+
 const char * cl_error_strings_helper[] =
 {
 	"CL_SUCCESS",
@@ -86,6 +89,17 @@ void checkErr(cl_int err, const char * name)
 StereoSGM::StereoSGM()
 {
 
+	initCL();
+
+
+}
+
+StereoSGM::~StereoSGM()
+{
+}
+
+void StereoSGM::initCL()
+{
 	std::vector<cl::Platform> platform_list;
 	cl::Platform::get(&platform_list);
 
@@ -95,7 +109,7 @@ StereoSGM::StereoSGM()
 	std::string platformVersion;
 
 	platform_list[platform_index].getInfo((cl_platform_info)CL_PLATFORM_VENDOR, &platformVendor);
-	printf("Platform vendor: %s \n" ,platformVendor.c_str());
+	printf("Platform vendor: %s \n", platformVendor.c_str());
 
 	platform_list[platform_index].getInfo((cl_platform_info)CL_PLATFORM_VERSION, &platformVersion);
 	printf("Platform version: %s \n", platformVersion.c_str());
@@ -106,12 +120,49 @@ StereoSGM::StereoSGM()
 	checkErr(m_err, "getDevicesList");
 
 	assert(devices.size() > device_index);
+	m_device = devices[device_index];
 	std::string device_name;
-	devices[device_index].getInfo(CL_DEVICE_NAME, &device_name);
+	m_device.getInfo(CL_DEVICE_NAME, &device_name);
 	printf("Selected device: %s \n", device_name.c_str());
 
-}
 
-StereoSGM::~StereoSGM()
-{
+	cl_context_properties cprops[3] =
+	{
+		CL_CONTEXT_PLATFORM, (cl_context_properties)(platform_list[platform_index])(), 0
+	};
+
+	m_context = cl::Context(
+		m_device,
+		cprops,
+		NULL,
+		NULL,
+		&m_err
+	);
+
+	checkErr(m_err, "Conext::Context()");
+
+	m_command_queue = cl::CommandQueue(m_context, m_device, 0, &m_err);
+	checkErr(m_err, "COMMAND QUEUE creation failed");
+	size_t max_wg_size = 0;
+	m_device.getInfo(CL_DEVICE_MAX_WORK_GROUP_SIZE, &max_wg_size);
+	printf("OpenCL context created, max wg size: %zd \n", max_wg_size);
+
+
+	//reading the kernel source
+	std::ifstream f(cl_file_name);
+	std::string kernel_source((std::istreambuf_iterator<char>(f)),
+		std::istreambuf_iterator<char>());
+
+	cl::Program::Sources source(1,
+		std::make_pair(kernel_source.c_str(), kernel_source.size()));
+	m_program = cl::Program(m_context, source);
+	m_err = m_program.build({ m_device });
+	checkErr(m_err, "build kernel");
+
+	std::string build_log = m_program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
+	if (!build_log.empty() && build_log != "\n")
+		printf("CL kernel build LOG: \n %s \n", build_log.c_str());
+
+	//m_kernel = cl::Kernel(m_program, "naive", &m_err);
+	checkErr(m_err, "kernel");
 }

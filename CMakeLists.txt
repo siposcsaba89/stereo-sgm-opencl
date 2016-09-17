@@ -5,7 +5,7 @@ project(sgm-opencl)
 
 find_package(OpenCL REQUIRED)
 
-add_library(sgm-opencl stereo-sgm.cpp stereo-sgm.h)
+add_library(sgm-opencl stereo-sgm.cpp stereo-sgm.h sgm-program.cl)
 target_link_libraries(sgm-opencl PUBLIC ${OpenCL_LIBRARIES})
 target_include_directories(sgm-opencl PUBLIC ${OpenCL_INCLUDE_DIRS})
 
