@@ -4,7 +4,7 @@
 #include <fstream>
 
 std::string cl_file_name = "sgm-program.cl";
-int platform_index = 1;
+int platform_index = 0;
 int device_index = 0;
 
 const char * cl_error_strings_helper[] =

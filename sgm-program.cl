@@ -156,8 +156,13 @@ kernel void census_kernel(int hor, int vert, global uchar * d_source, global ulo
 #define DISP_SIZE 128
 #define PATHS_IN_BLOCK 16
 
-kernel void matching_cost_kernel128(
-	global const ulong * d_left, global const uint64_t* d_right,
+#define PENALTY1 20
+#define PENALTY2 100
+#define v_PENALTY1 = (PENALTY1 << 16) | (PENALTY1 << 0);
+#define v_PENALTY2 = (PENALTY2 << 16) | (PENALTY2 << 0);
+
+kernel void matching_cost_kernel_128(
+	global const uint64_t * d_left, global const uint64_t* d_right,
 	global uint8_t* d_cost, int width, int height)
 {
 	int loc_x = get_local_id(0);
@@ -187,7 +192,7 @@ kernel void matching_cost_kernel128(
 
 #pragma unroll
 		for (int x = 0; x < 32; x++) {
-			uint64_t left_val = left_warp_0[x];// shfl_u64(left_warp_0, x);
+            uint64_t left_val = d_left[y * width + x];// left_warp_0[x];// shfl_u64(left_warp_0, x);
 #pragma unroll
 			for (int k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
@@ -198,7 +203,7 @@ kernel void matching_cost_kernel128(
 
 #pragma unroll
 		for (int x = 32; x < 64; x++) {
-			uint64_t left_val = left_warp_32[x - 32];// shfl_u64(left_warp_32, x);
+            uint64_t left_val = d_left[y * width + x];// left_warp_32[x - 32];// shfl_u64(left_warp_32, x);
 #pragma unroll
 			for (int k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
@@ -209,7 +214,7 @@ kernel void matching_cost_kernel128(
 
 #pragma unroll
 		for (int x = 64; x < 96; x++) {
-			uint64_t left_val = left_warp_64[x-64];// shfl_u64(left_warp_64, x);
+            uint64_t left_val = d_left[y * width + x];// left_warp_64[x - 64];// shfl_u64(left_warp_64, x);
 #pragma unroll
 			for (int k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
@@ -220,7 +225,7 @@ kernel void matching_cost_kernel128(
 
 #pragma unroll
 		for (int x = 96; x < 128; x++) {
-			uint64_t left_val = left_warp_96[x-96];// shfl_u64(left_warp_96, x);
+			uint64_t left_val = d_left[y * width + x];// shfl_u64(left_warp_96, x);
 #pragma unroll
 			for (int k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
@@ -233,10 +238,10 @@ kernel void matching_cost_kernel128(
 
 
 	for (int x = 128; x < width; x += 32) {
-		uint64_t left_warp = d_left[y * width + (x + loc_x)];
+		//uint64_t left_warp = d_left[y * width + (x + loc_x)];
 		right_buf[sh_offset + loc_x + 128] = d_right[y * width + (x + loc_x)];
 		for (int xoff = 0; xoff < 32; xoff++) {
-			uint64_t left_val = 0;// shfl_u64(left_warp, xoff);
+            uint64_t left_val = d_left[y * width + x + xoff];// 0;// shfl_u64(left_warp, xoff);
 #pragma unroll
 			for (int k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = right_buf[sh_offset + 128 + xoff - k];
@@ -244,6 +249,7 @@ kernel void matching_cost_kernel128(
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
 			}
 		}
+        //32 elso elemet kidobjuk
 		right_buf[sh_offset + loc_x + 0] = right_buf[sh_offset +  loc_x + 32];
 		right_buf[sh_offset + loc_x + 32] = right_buf[sh_offset + loc_x + 64];
 		right_buf[sh_offset + loc_x + 64] = right_buf[sh_offset + loc_x + 96];
@@ -263,43 +269,43 @@ inline void init_lcost_sh_128(local uint16_t* sh) {
 	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 2] = 0;
 	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 3] = 0;
 }
-/*
+
 inline int stereo_loop_128(
 	int i, int j, global const uint8_t*  d_matching_cost,
-	global uint16_t *d_scost, int width, int height, int minCost, local uint16_t *lcost_sh) {
+	global uint16_t *d_scost, int width, int height, uint32_t minCost, local uint16_t *lcost_sh) {
 
 
 	int idx = i * width + j;
-	int k = get_local_id(0) << 2;
+    int k = get_local_id(0);// << 2;
 	int shIdx = DISP_SIZE * get_local_id(1) + k;
 
-	uint32_t diff_tmp = uint32_t*(&d_matching_cost[idx * DISP_SIZE + k])[0];
+	uint32_t diff_tmp = d_matching_cost[idx * DISP_SIZE + k];
 	const uint32_t v_zero = 0;
-	uint32_t v_diff_L = __byte_perm(v_zero, diff_tmp, 0x0504); // pack( 0x00'[k+1], 0x00'[k+0])
-	uint32_t v_diff_H = __byte_perm(v_zero, diff_tmp, 0x0706); // pack( 0x00'[k+3], 0x00'[k+2])
+	uint32_t v_diff_L = amd_bytealign(v_zero, diff_tmp, 0x0504); // pack( 0x00'[k+1], 0x00'[k+0])
+	uint32_t v_diff_H = amd_bytealign(v_zero, diff_tmp, 0x0706); // pack( 0x00'[k+3], 0x00'[k+2])
 
-															   // memory layout
+	/*														   // memory layout
 															   //              [            this_warp          ]
 															   // lcost_sh_prev lcost_sh_curr_L lcost_sh_curr_H lcost_sh_next
 															   // -   16bit   -
 
-	uint32_t lcost_sh_curr_L = *reinterpret_cast<uint32_t*>(&lcost_sh[shIdx + 0]);
-	uint32_t lcost_sh_curr_H = *reinterpret_cast<uint32_t*>(&lcost_sh[shIdx + 2]);
-
-	uint32_t lcost_sh_prev = __shfl_up((int)lcost_sh_curr_H, 1, 32);
-	uint32_t lcost_sh_next = __shfl_down((int)lcost_sh_curr_L, 1, 32);
+	uint32_t lcost_sh_curr_L = lcost_sh[shIdx + 0];
+	uint32_t lcost_sh_curr_H = lcost_sh[shIdx + 1];
+    
+    uint32_t lcost_sh_prev = lcost_sh[shIdx + 1];// __shfl_up((int)lcost_sh_curr_H, 1, 32);
+	uint32_t lcost_sh_next = lcost_sh[shIdx - 1];//__shfl_down((int)lcost_sh_curr_L, 1, 32);
 
 	uint32_t v_cost0_L = lcost_sh_curr_L;
 	uint32_t v_cost0_H = lcost_sh_curr_H;
-	uint32_t v_cost1_L = __byte_perm(lcost_sh_prev, lcost_sh_curr_L, 0x5432);
-	uint32_t v_cost1_H = __byte_perm(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
+	uint32_t v_cost1_L = amd_bytealign(lcost_sh_prev, lcost_sh_curr_L, 0x5432);
+	uint32_t v_cost1_H = amd_bytealign(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
 
-	uint32_t v_cost2_L = __byte_perm(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
-	uint32_t v_cost2_H = __byte_perm(lcost_sh_curr_H, lcost_sh_next, 0x5432);
+	uint32_t v_cost2_L = amd_bytealign(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
+	uint32_t v_cost2_H = amd_bytealign(lcost_sh_curr_H, lcost_sh_next, 0x5432);
 
-	uint32_t v_minCost = __byte_perm(minCost, minCost, 0x1010);
-
-	uint32_t v_cost3 = __vadd2(v_minCost, v_PENALTY2);
+	uint32_t v_minCost = amd_bytealign(minCost, minCost, 0x1010);
+    
+	uint32_t v_cost3 = v_minCost + v_PENALTY2;
 
 	v_cost1_L = __vadd2(v_cost1_L, v_PENALTY1);
 	v_cost2_L = __vadd2(v_cost2_L, v_PENALTY1);
@@ -334,9 +340,9 @@ inline int stereo_loop_128(
 	uint32_t cost_tmp = __vminu2(cost_tmp_L, cost_tmp_H);
 	uint16_t cost_0 = cost_tmp >> 16;
 	uint16_t cost_1 = cost_tmp & 0xffff;
-	int minCostNext = min(cost_0, cost_1);
-	return min_warp(minCostNext);
-}*/
+	int minCostNext = min(cost_0, cost_1);*/
+return 0;// min_warp(minCostNext);
+}
 
 
 kernel void compute_stereo_horizontal_dir_kernel_0(
@@ -348,6 +354,6 @@ kernel void compute_stereo_horizontal_dir_kernel_0(
 	int minCost = 0;
 #pragma unroll
 	for (int j = 0; j < width; j++) {
-//		minCost = stereo_loop<DISP_SIZE>(get_idx_y<DIR_ID>(height, i), get_idx_x<DIR_ID>(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh);
+		minCost = stereo_loop_128(get_idx_y_0(height, i), get_idx_x_0(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh);
 	}
 }
