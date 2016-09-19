@@ -25,6 +25,8 @@ kernel void test()
 #define int16_t short
 #define int8_t char
 
+#define USE_ATOMIC
+
 kernel void census_kernel(int hor, int vert, global uchar * d_source, global ulong* d_dest, int width, int height)
 {
 	const int i = get_global_id(1); //threadIdx.y + blockIdx.y * blockDim.y;
@@ -154,7 +156,7 @@ kernel void census_kernel(int hor, int vert, global uchar * d_source, global ulo
 
 #define MCOST_LINES128 8
 #define DISP_SIZE 128
-#define PATHS_IN_BLOCK 16
+#define PATHS_IN_BLOCK 8
 
 #define PENALTY1 20
 #define PENALTY2 100
@@ -263,97 +265,132 @@ inline int get_idx_y_0(int height, int i) { return i; }
 inline int get_idx_x_4(int width, int j) { return width - 1 - j; }
 inline int get_idx_y_4(int height, int i) { return i; }
 
-inline void init_lcost_sh_128(local uint16_t* sh) {
-	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 0] = 0;
-	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 1] = 0;
-	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 2] = 0;
-	sh[128 * get_local_id(1) + get_local_id(0) * 4 + 3] = 0;
+inline void init_lcost_sh_128(local ushort2* sh) {
+	sh[128 * get_local_id(1) / 2 + get_local_id(0) * 2 + 0] = (ushort2)(0);
+	sh[128 * get_local_id(1) / 2 + get_local_id(0) * 2 + 1] = (ushort2)(0);
+	//sh[MAX_ * get_local_id(1) + get_local_id(0) * 4 + 2] = 0;
+	//sh[MAX_ * get_local_id(1) + get_local_id(0) * 4 + 3] = 0;
+}
+
+inline int min_warp(local ushort * minCostNext)
+{
+    int local_index = get_local_id(0) + get_local_id(1) * 32;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (int offset = 32 / 2;
+        offset > 0;
+        offset = offset / 2) {
+        if (get_local_id(0) < offset) {
+            ushort other = minCostNext[local_index + offset];
+            ushort mine = minCostNext[local_index];
+            minCostNext[local_index] = (mine < other) ? mine : other;
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+   
+    return  minCostNext[get_local_id(1) * 32];
 }
 
 inline int stereo_loop_128(
-	int i, int j, global const uint8_t*  d_matching_cost,
-	global uint16_t *d_scost, int width, int height, uint32_t minCost, local uint16_t *lcost_sh) {
+	int i, int j, global const uchar4 *  d_matching_cost,
+	global uint16_t *d_scost, int width, int height, ushort2 minCost, local ushort2 *lcost_sh,
+    local ushort * minCostNext) {
 
 
-	int idx = i * width + j;
-    int k = get_local_id(0);// << 2;
-	int shIdx = DISP_SIZE * get_local_id(1) + k;
+	int idx = i * width + j; // image index
+    int k = get_local_id(0); // (128 disp) k in [0..31]
+	int shIdx = DISP_SIZE * get_local_id(1) / 2 + 2 * k;
 
-	uint32_t diff_tmp = d_matching_cost[idx * DISP_SIZE + k];
-	const uint32_t v_zero = 0;
-	uint32_t v_diff_L = amd_bytealign(v_zero, diff_tmp, 0x0504); // pack( 0x00'[k+1], 0x00'[k+0])
-	uint32_t v_diff_H = amd_bytealign(v_zero, diff_tmp, 0x0706); // pack( 0x00'[k+3], 0x00'[k+2])
+	uchar4 diff_tmp = d_matching_cost[idx * DISP_SIZE / 4 + k];
 
-	/*														   // memory layout
+    ushort2 v_diff_L = (ushort2)(diff_tmp.y, diff_tmp.x); // (0x0504) pack( 0x00'[k+1], 0x00'[k+0])
+    ushort2 v_diff_H = (ushort2)(diff_tmp.w, diff_tmp.z); // (0x0706) pack( 0x00'[k+3], 0x00'[k+2])
+
+														   // memory layout
 															   //              [            this_warp          ]
 															   // lcost_sh_prev lcost_sh_curr_L lcost_sh_curr_H lcost_sh_next
 															   // -   16bit   -
 
-	uint32_t lcost_sh_curr_L = lcost_sh[shIdx + 0];
-	uint32_t lcost_sh_curr_H = lcost_sh[shIdx + 1];
+	ushort2 lcost_sh_curr_L = lcost_sh[shIdx + 0];
+	ushort2 lcost_sh_curr_H = lcost_sh[shIdx + 1];
+    ushort2 lcost_sh_prev, lcost_sh_next;
     
-    uint32_t lcost_sh_prev = lcost_sh[shIdx + 1];// __shfl_up((int)lcost_sh_curr_H, 1, 32);
-	uint32_t lcost_sh_next = lcost_sh[shIdx - 1];//__shfl_down((int)lcost_sh_curr_L, 1, 32);
-
-	uint32_t v_cost0_L = lcost_sh_curr_L;
-	uint32_t v_cost0_H = lcost_sh_curr_H;
-	uint32_t v_cost1_L = amd_bytealign(lcost_sh_prev, lcost_sh_curr_L, 0x5432);
-	uint32_t v_cost1_H = amd_bytealign(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
-
-	uint32_t v_cost2_L = amd_bytealign(lcost_sh_curr_L, lcost_sh_curr_H, 0x5432);
-	uint32_t v_cost2_H = amd_bytealign(lcost_sh_curr_H, lcost_sh_next, 0x5432);
-
-	uint32_t v_minCost = amd_bytealign(minCost, minCost, 0x1010);
+    if (shIdx + 2 < DISP_SIZE * PATHS_IN_BLOCK / 2 )
+        lcost_sh_prev = lcost_sh[shIdx + 2];// __shfl_up((int)lcost_sh_curr_H, 1, 32);
+    else
+        lcost_sh_prev = lcost_sh_curr_H;
+	
+    if (shIdx - 1 > 0)
+        lcost_sh_next = lcost_sh[shIdx - 1];
+    else
+        lcost_sh_next = lcost_sh_curr_L;
+    barrier(CLK_LOCAL_MEM_FENCE);
     
-	uint32_t v_cost3 = v_minCost + v_PENALTY2;
+	ushort2 v_cost0_L = lcost_sh_curr_L;
+	ushort2 v_cost0_H = lcost_sh_curr_H;
+    ushort2 v_cost1_L = (ushort2)(lcost_sh_curr_L.x, lcost_sh_prev.y);// , 0x5432);
+    ushort2 v_cost1_H = (ushort2)(lcost_sh_curr_H.x, lcost_sh_curr_L.y); // 0x5432);
+    
+    ushort2 v_cost2_L = (ushort2)(lcost_sh_curr_H.x, lcost_sh_curr_L.y);// 0x5432);
+    ushort2 v_cost2_H = (ushort2)(lcost_sh_next.x, lcost_sh_curr_H.y);//, 0x5432);
 
-	v_cost1_L = __vadd2(v_cost1_L, v_PENALTY1);
-	v_cost2_L = __vadd2(v_cost2_L, v_PENALTY1);
+    ushort2 v_minCost = minCost;//amd_bytealign(minCost, minCost, 0x1010);
+    
+	ushort2 v_cost3 = v_minCost + (ushort2)(PENALTY2, PENALTY2);
+    
+	v_cost1_L = v_cost1_L + (ushort2)(PENALTY1);
+	v_cost2_L = v_cost2_L + (ushort2)(PENALTY1);
 
-	v_cost1_H = __vadd2(v_cost1_H, v_PENALTY1);
-	v_cost2_H = __vadd2(v_cost2_H, v_PENALTY1);
-
-	uint32_t v_tmp_a_L = __vminu2(v_cost0_L, v_cost1_L);
-	uint32_t v_tmp_a_H = __vminu2(v_cost0_H, v_cost1_H);
-
-	uint32_t v_tmp_b_L = __vminu2(v_cost2_L, v_cost3);
-	uint32_t v_tmp_b_H = __vminu2(v_cost2_H, v_cost3);
-
-	uint32_t cost_tmp_L = __vsub2(__vadd2(v_diff_L, __vminu2(v_tmp_a_L, v_tmp_b_L)), v_minCost);
-	uint32_t cost_tmp_H = __vsub2(__vadd2(v_diff_H, __vminu2(v_tmp_a_H, v_tmp_b_H)), v_minCost);
-
-	uint64_t* dst = reinterpret_cast<uint64_t*>(&d_scost[DISP_SIZE * idx + k]);
-
-	uint2 cost_tmp_32x2;
-	cost_tmp_32x2.x = cost_tmp_L;
-	cost_tmp_32x2.y = cost_tmp_H;
+	v_cost1_H = v_cost1_H + (ushort2)(PENALTY1);
+	v_cost2_H = v_cost2_H + (ushort2)(PENALTY1);
+    
+	ushort2 v_tmp_a_L = min(v_cost0_L, v_cost1_L);
+    ushort2 v_tmp_a_H = min(v_cost0_H, v_cost1_H);
+    
+	ushort2 v_tmp_b_L = min(v_cost2_L, v_cost3);
+	ushort2 v_tmp_b_H = min(v_cost2_H, v_cost3);
+    
+	ushort2 cost_tmp_L = v_diff_L + min(v_tmp_a_L, v_tmp_b_L) - v_minCost;
+	ushort2 cost_tmp_H = v_diff_H + min(v_tmp_a_H, v_tmp_b_H) - v_minCost;
+    
+    //itt lehet cserelgetni kell (x, y) -- (y, x)
+    d_scost[DISP_SIZE * idx + k * 4 + 0] += cost_tmp_L.x;
+    d_scost[DISP_SIZE * idx + k * 4 + 1] += cost_tmp_L.y;
+    d_scost[DISP_SIZE * idx + k * 4 + 2] += cost_tmp_H.x;
+    d_scost[DISP_SIZE * idx + k * 4 + 3] += cost_tmp_H.y;
+	//uint2 cost_tmp_32x2;
+	//cost_tmp_32x2.x = cost_tmp_L;
+	//cost_tmp_32x2.y = cost_tmp_H;
 	// if no overflow, __vadd2(x,y) == x + y
-#ifdef USE_ATOMIC
-	atomicAdd((unsigned long long int*)dst, *reinterpret_cast<unsigned long long int*>(&cost_tmp_32x2));
-#else
-	*dst = *reinterpret_cast<uint64_t*>(&cost_tmp_32x2);
-#endif
+//#ifdef USE_ATOMIC
+//	atomicAdd((unsigned long long int*)dst, *reinterpret_cast<unsigned long long int*>(&cost_tmp_32x2)); // parhztamossag miatt kell szerintem
+//#else
+//	*dst = *reinterpret_cast<uint64_t*>(&cost_tmp_32x2);
+//#endif
 
-	*reinterpret_cast<uint32_t*>(&lcost_sh[shIdx + 0]) = cost_tmp_L;
-	*reinterpret_cast<uint32_t*>(&lcost_sh[shIdx + 2]) = cost_tmp_H;
+    lcost_sh[shIdx + 0] = cost_tmp_L;
+    lcost_sh[shIdx + 1] = cost_tmp_H;
 
-	uint32_t cost_tmp = __vminu2(cost_tmp_L, cost_tmp_H);
-	uint16_t cost_0 = cost_tmp >> 16;
-	uint16_t cost_1 = cost_tmp & 0xffff;
-	int minCostNext = min(cost_0, cost_1);*/
-return 0;// min_warp(minCostNext);
+
+	ushort2 cost_tmp = min(cost_tmp_L, cost_tmp_H);
+	
+    
+
+	minCostNext[get_local_id(1)* 32  + get_local_id(0) ] = min(cost_tmp.x, cost_tmp.y);
+    
+    return  min_warp(minCostNext);
 }
 
 
 kernel void compute_stereo_horizontal_dir_kernel_0(
-	global const uint8_t* d_matching_cost, global uint16_t *d_scost, int width, int height)
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
 {
-	local uint16_t lcost_sh[DISP_SIZE * PATHS_IN_BLOCK];
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+    local ushort minCostNext[32 * PATHS_IN_BLOCK];
 	init_lcost_sh_128(lcost_sh);
 	int i = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
-	int minCost = 0;
-#pragma unroll
-	for (int j = 0; j < width; j++) {
-		minCost = stereo_loop_128(get_idx_y_0(height, i), get_idx_x_0(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh);
+	ushort2 minCost = (ushort2)0;
+
+    for (int j = 0; j < width; j++) {
+		minCost = stereo_loop_128(get_idx_y_0(height, i), get_idx_x_0(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
 	}
 }
