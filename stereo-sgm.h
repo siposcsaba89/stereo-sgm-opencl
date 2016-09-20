@@ -36,6 +36,14 @@ private:
 
 	cl::Kernel m_compute_stereo_horizontal_dir_kernel_0;
 	cl::Kernel m_compute_stereo_horizontal_dir_kernel_4;
+	cl::Kernel m_compute_stereo_vertical_dir_kernel_2;
+	cl::Kernel m_compute_stereo_vertical_dir_kernel_6;
+
+	cl::Kernel m_compute_stereo_oblique_dir_kernel_1;
+	cl::Kernel m_compute_stereo_oblique_dir_kernel_3;
+	cl::Kernel m_compute_stereo_oblique_dir_kernel_5;
+	cl::Kernel m_compute_stereo_oblique_dir_kernel_7;
+
 
 	cl::Kernel m_winner_takes_all_kernel128;
 	

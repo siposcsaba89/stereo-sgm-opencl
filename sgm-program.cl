@@ -12,8 +12,8 @@ kernel void test()
 
 #define threads_per_block  16
 
-#define swidth threads_per_block + HOR
-#define sheight threads_per_block + VERT
+#define swidth (threads_per_block + HOR)
+#define sheight (threads_per_block + VERT)
 
 #define uint64_t ulong
 #define uint32_t uint
@@ -37,7 +37,7 @@ kernel void census_kernel(global const uchar * d_source, global ulong* d_dest, i
 	const int rad_v = VERT / 2;
 
 	
-	local short s_source[swidth*sheight];
+	local uchar s_source[swidth*sheight];
 
 	/**
 	*                  *- blockDim.x
@@ -170,7 +170,7 @@ kernel void matching_cost_kernel_128(
 	int loc_x = get_local_id(0);
 	int loc_y = get_local_id(1);
 	int gr_x = get_group_id(0);
-	int gr_y = get_group_id(1);
+	//int gr_y = get_group_id(1);
 
 	local uint64_t right_buf[(128 + 32) * MCOST_LINES128];
 	int y = gr_x * MCOST_LINES128 + loc_y;
@@ -181,15 +181,15 @@ kernel void matching_cost_kernel_128(
 			right_buf[sh_offset + loc_x + t] = d_right[y * width + loc_x + t];
 		}
 
-		local uint64_t left_warp_0[32]; 
-		left_warp_0[loc_x] = d_left[y * width + loc_x];
-		local uint64_t left_warp_32[32];
-		left_warp_32[loc_x] = d_left[y * width + loc_x + 32];
-		local uint64_t left_warp_64[32]; 
-		left_warp_64[loc_x] = d_left[y * width + loc_x + 64];
-		local uint64_t left_warp_96[32];
-		left_warp_96[loc_x] = d_left[y * width + loc_x + 96];
-		barrier(CLK_LOCAL_MEM_FENCE);
+		//local uint64_t left_warp_0[32]; 
+		//left_warp_0[loc_x] = d_left[y * width + loc_x];
+		//local uint64_t left_warp_32[32];
+		//left_warp_32[loc_x] = d_left[y * width + loc_x + 32];
+		//local uint64_t left_warp_64[32]; 
+		//left_warp_64[loc_x] = d_left[y * width + loc_x + 64];
+		//local uint64_t left_warp_96[32];
+		//left_warp_96[loc_x] = d_left[y * width + loc_x + 96];
+		//barrier(CLK_LOCAL_MEM_FENCE);
 
 
 #pragma unroll
@@ -264,10 +264,16 @@ inline int get_idx_x_0(int width, int j) { return j; }
 inline int get_idx_y_0(int height, int i) { return i; }
 inline int get_idx_x_4(int width, int j) { return width - 1 - j; }
 inline int get_idx_y_4(int height, int i) { return i; }
+inline int get_idx_x_2(int width, int j) { return j; }
+inline int get_idx_y_2(int height, int i) { return i; }
+inline int get_idx_x_6(int width, int j) { return j; }
+inline int get_idx_y_6(int height, int i) { return height - 1 - i; }
+
 
 inline void init_lcost_sh_128(local ushort2* sh) {
 	sh[128 * get_local_id(1) / 2 + get_local_id(0) * 2 + 0] = (ushort2)(0);
 	sh[128 * get_local_id(1) / 2 + get_local_id(0) * 2 + 1] = (ushort2)(0);
+	barrier(CLK_LOCAL_MEM_FENCE);
 	//sh[MAX_ * get_local_id(1) + get_local_id(0) * 4 + 2] = 0;
 	//sh[MAX_ * get_local_id(1) + get_local_id(0) * 4 + 3] = 0;
 }
@@ -312,7 +318,7 @@ inline int min_warp_int(local int * values)
 
 inline int stereo_loop_128(
 	int i, int j, global const uchar4 *  d_matching_cost,
-	global uint16_t *d_scost, int width, int height, ushort2 minCost, local ushort2 *lcost_sh,
+	global uint16_t *d_scost, int width, int height, int minCost, local ushort2 *lcost_sh,
     local ushort * minCostNext) {
 
 
@@ -353,7 +359,7 @@ inline int stereo_loop_128(
     ushort2 v_cost2_L = (ushort2)(lcost_sh_curr_H.x, lcost_sh_curr_L.y);// 0x5432);
     ushort2 v_cost2_H = (ushort2)(lcost_sh_next.x, lcost_sh_curr_H.y);//, 0x5432);
 
-    ushort2 v_minCost = minCost;//amd_bytealign(minCost, minCost, 0x1010);
+    ushort2 v_minCost = (ushort2)(minCost, minCost);//amd_bytealign(minCost, minCost, 0x1010);
     
 	ushort2 v_cost3 = v_minCost + (ushort2)(PENALTY2, PENALTY2);
     
@@ -408,10 +414,11 @@ kernel void compute_stereo_horizontal_dir_kernel_0(
     local ushort minCostNext[32 * PATHS_IN_BLOCK];
 	init_lcost_sh_128(lcost_sh);
 	int i = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
-	ushort2 minCost = (ushort2)0;
+	int minCost = 0;
 
     for (int j = 0; j < width; j++) {
 		minCost = stereo_loop_128(get_idx_y_0(height, i), get_idx_x_0(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 }
 
@@ -423,12 +430,174 @@ kernel void compute_stereo_horizontal_dir_kernel_4(
 
 	init_lcost_sh_128(lcost_sh);
 	int i = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
-	ushort2 minCost = (ushort2)0;
-#pragma unroll
+	int minCost = 0;
+//#pragma unroll
 	for (int j = 0; j < width; j++) {
 		minCost = stereo_loop_128(get_idx_y_4(height, i), get_idx_x_4(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 }
+
+kernel void compute_stereo_vertical_dir_kernel_2(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+	int j = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	int minCost = 0;
+	//#pragma unroll
+	for (int i = 0; i < height; i++) {
+		minCost = stereo_loop_128(get_idx_y_2(height, i), get_idx_x_2(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+}
+
+
+kernel void compute_stereo_vertical_dir_kernel_6(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+	int j = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	int minCost = 0;
+	//#pragma unroll
+	for (int i = 0; i < height; i++) {
+		minCost = stereo_loop_128(get_idx_y_6(height, i), get_idx_x_6(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+}
+
+
+
+int get_idx_x_1(int width, int j) { return j; }
+int get_idx_y_1(int height, int i) { return i; }
+int get_idx_x_3(int width, int j) { return width - 1 - j; }
+int get_idx_y_3(int height, int i) { return i; }
+int get_idx_x_5(int width, int j) { return width - 1 - j; }
+int get_idx_y_5(int height, int i) { return height - 1 - i; }
+int get_idx_x_7(int width, int j) { return j; }
+int get_idx_y_7(int height, int i) { return height - 1 - i; }
+
+kernel void compute_stereo_oblique_dir_kernel_1(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+	
+	const int num_paths = width + height - 1;
+	int pathIdx = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	if (pathIdx >= num_paths) { return; }
+
+	int i = max(0, -(width - 1) + pathIdx);
+	int j = max(0, width - 1 - pathIdx);
+
+	int minCost = 0;
+
+	//#pragma unroll
+	while (i < height && j < width) {
+		minCost = stereo_loop_128(get_idx_y_1(height, i), get_idx_x_1(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+		i++; j++;
+	}
+}
+
+
+kernel void compute_stereo_oblique_dir_kernel_3(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+
+	const int num_paths = width + height - 1;
+	int pathIdx = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	if (pathIdx >= num_paths) { return; }
+
+	int i = max(0, -(width - 1) + pathIdx);
+	int j = max(0, width - 1 - pathIdx);
+
+	int minCost = 0;
+
+	//#pragma unroll
+	while (i < height && j < width) {
+		minCost = stereo_loop_128(get_idx_y_3(height, i), get_idx_x_3(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+		i++; j++;
+	}
+}
+
+kernel void compute_stereo_oblique_dir_kernel_5(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+
+	const int num_paths = width + height - 1;
+	int pathIdx = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	if (pathIdx >= num_paths) { return; }
+
+	int i = max(0, -(width - 1) + pathIdx);
+	int j = max(0, width - 1 - pathIdx);
+
+	int minCost = 0;
+
+	//#pragma unroll
+	while (i < height && j < width) {
+		minCost = stereo_loop_128(get_idx_y_5(height, i), get_idx_x_5(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+		i++; j++;
+	}
+}
+
+kernel void compute_stereo_oblique_dir_kernel_7(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+
+	const int num_paths = width + height - 1;
+	int pathIdx = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	if (pathIdx >= num_paths) { return; }
+
+	int i = max(0, -(width - 1) + pathIdx);
+	int j = max(0, width - 1 - pathIdx);
+
+	int minCost = 0;
+
+	//#pragma unroll
+	while (i < height && j < width) {
+		minCost = stereo_loop_128(get_idx_y_7(height, i), get_idx_x_7(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+		//if (i == 345)
+		//	printf("asdasda %d \n", minCost);
+		barrier(CLK_LOCAL_MEM_FENCE);
+		i++; j++;
+	}
+}
+
+
 #define WTA_PIXEL_IN_BLOCK 8
 
 

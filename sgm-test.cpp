@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
 
 	uint16_t* d_output_buffer = nullptr;
 
-	cv::UMat img1c, img2c;
+	cv::Mat img1c, img2c;
 	cv::Mat img1r, img2r;
 
 	int frame_no = 0;

@@ -4,7 +4,7 @@
 #include <fstream>
 
 std::string cl_file_name = "sgm-program.cl";
-int platform_index = 1;
+int platform_index = 0;
 int device_index = 0;
 
 const char * cl_error_strings_helper[] =
@@ -106,18 +106,23 @@ bool StereoSGM::init()
 
 void StereoSGM::execute(void * left_data, void * right_data, void * output_buffer)
 {
-
-	cl_int m_err = m_command_queue.enqueueWriteBuffer(d_src_left, true, 0, m_width * m_height, left_data);
+	cl_int m_err = m_command_queue.finish();
+	m_err = m_command_queue.enqueueWriteBuffer(d_src_left, true, 0, m_width * m_height, left_data);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 
 	m_err = m_command_queue.enqueueWriteBuffer(d_src_right, true, 0, m_width * m_height, right_data);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 
+	m_err = m_command_queue.finish();
 	census();
+	m_err = m_command_queue.finish();
+
 
 	mem_init();
+	m_err = m_command_queue.finish();
 
 	matching_cost();
+	m_err = m_command_queue.finish();
 
 	
 	//m_err = m_command_queue.enqueueNDRangeKernel(m_copy_u8_to_u16,
@@ -128,10 +133,13 @@ void StereoSGM::execute(void * left_data, void * right_data, void * output_buffe
 
 
 	scan_cost();
+	m_err = m_command_queue.finish();
 
 	winner_takes_all();
+	m_err = m_command_queue.finish();
 
 	median();
+	m_err = m_command_queue.finish();
 
 	check_consistency_left();
 
@@ -212,10 +220,26 @@ void StereoSGM::initCL()
 	checkErr(m_err, "kernel");
 	m_matching_cost_kernel_128 = cl::Kernel(m_program, "matching_cost_kernel_128", &m_err);
 	checkErr(m_err, "kernel");
+	
+	
 	m_compute_stereo_horizontal_dir_kernel_0 = cl::Kernel(m_program, "compute_stereo_horizontal_dir_kernel_0", &m_err);
 	checkErr(m_err, "kernel");
 	m_compute_stereo_horizontal_dir_kernel_4 = cl::Kernel(m_program, "compute_stereo_horizontal_dir_kernel_4", &m_err);
 	checkErr(m_err, "kernel");
+	m_compute_stereo_vertical_dir_kernel_2 = cl::Kernel(m_program, "compute_stereo_vertical_dir_kernel_2", &m_err);
+	checkErr(m_err, "kernel");
+	m_compute_stereo_vertical_dir_kernel_6 = cl::Kernel(m_program, "compute_stereo_vertical_dir_kernel_6", &m_err);
+	checkErr(m_err, "kernel");	
+	m_compute_stereo_oblique_dir_kernel_1 = cl::Kernel(m_program, "compute_stereo_oblique_dir_kernel_1", &m_err);
+	checkErr(m_err, "kernel");
+	m_compute_stereo_oblique_dir_kernel_3 = cl::Kernel(m_program, "compute_stereo_oblique_dir_kernel_3", &m_err);
+	checkErr(m_err, "kernel");
+	m_compute_stereo_oblique_dir_kernel_5 = cl::Kernel(m_program, "compute_stereo_oblique_dir_kernel_5", &m_err);
+	checkErr(m_err, "kernel");
+	m_compute_stereo_oblique_dir_kernel_7 = cl::Kernel(m_program, "compute_stereo_oblique_dir_kernel_7", &m_err);
+	checkErr(m_err, "kernel");
+
+
 	m_winner_takes_all_kernel128 = cl::Kernel(m_program, "winner_takes_all_kernel128", &m_err);
 	checkErr(m_err, "kernel");
 
@@ -274,6 +298,40 @@ void StereoSGM::initCL()
 	m_compute_stereo_horizontal_dir_kernel_4.setArg(1, d_scost);
 	m_compute_stereo_horizontal_dir_kernel_4.setArg(2, m_width);
 	m_compute_stereo_horizontal_dir_kernel_4.setArg(3, m_height);
+
+
+	m_compute_stereo_vertical_dir_kernel_2.setArg(0, d_matching_cost);
+	m_compute_stereo_vertical_dir_kernel_2.setArg(1, d_scost);
+	m_compute_stereo_vertical_dir_kernel_2.setArg(2, m_width);
+	m_compute_stereo_vertical_dir_kernel_2.setArg(3, m_height);
+
+	m_compute_stereo_vertical_dir_kernel_6.setArg(0, d_matching_cost);
+	m_compute_stereo_vertical_dir_kernel_6.setArg(1, d_scost);
+	m_compute_stereo_vertical_dir_kernel_6.setArg(2, m_width);
+	m_compute_stereo_vertical_dir_kernel_6.setArg(3, m_height);
+
+
+	m_compute_stereo_oblique_dir_kernel_1.setArg(0, d_matching_cost);
+	m_compute_stereo_oblique_dir_kernel_1.setArg(1, d_scost);
+	m_compute_stereo_oblique_dir_kernel_1.setArg(2, m_width);
+	m_compute_stereo_oblique_dir_kernel_1.setArg(3, m_height);
+
+	m_compute_stereo_oblique_dir_kernel_3.setArg(0, d_matching_cost);
+	m_compute_stereo_oblique_dir_kernel_3.setArg(1, d_scost);
+	m_compute_stereo_oblique_dir_kernel_3.setArg(2, m_width);
+	m_compute_stereo_oblique_dir_kernel_3.setArg(3, m_height);
+
+	m_compute_stereo_oblique_dir_kernel_5.setArg(0, d_matching_cost);
+	m_compute_stereo_oblique_dir_kernel_5.setArg(1, d_scost);
+	m_compute_stereo_oblique_dir_kernel_5.setArg(2, m_width);
+	m_compute_stereo_oblique_dir_kernel_5.setArg(3, m_height);
+
+	m_compute_stereo_oblique_dir_kernel_7.setArg(0, d_matching_cost);
+	m_compute_stereo_oblique_dir_kernel_7.setArg(1, d_scost);
+	m_compute_stereo_oblique_dir_kernel_7.setArg(2, m_width);
+	m_compute_stereo_oblique_dir_kernel_7.setArg(3, m_height);
+
+
 
 	m_winner_takes_all_kernel128.setArg(0, d_left_disparity);
 	m_winner_takes_all_kernel128.setArg(1, d_right_disparity);
@@ -351,13 +409,53 @@ void StereoSGM::scan_cost()
 		cl::NDRange(32 * m_height / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_0_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-
-
+	
+	
 	cl::Event scan_cost_4_event;
 	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_horizontal_dir_kernel_4, cl::NDRange(0, 0, 0),
 		cl::NDRange(32 * m_height / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_4_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	
+	cl::Event scan_cost_2_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_vertical_dir_kernel_2, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * m_width / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_2_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	
+	cl::Event scan_cost_6_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_vertical_dir_kernel_6, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * m_width / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_6_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+
+	const int obl_num_paths = m_width + m_height ;
+	cl::Event scan_cost_1_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_1, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_1_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+
+	cl::Event scan_cost_3_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_3, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_3_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+
+
+	cl::Event scan_cost_5_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_5, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_5_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+
+	cl::Event scan_cost_7_event;
+	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_7, cl::NDRange(0, 0, 0),
+		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
+		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_7_event);
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+
+
 
 }
 
