@@ -341,23 +341,23 @@ inline int stereo_loop_128(
     ushort2 lcost_sh_prev, lcost_sh_next;
     
     if (shIdx + 2 < DISP_SIZE * PATHS_IN_BLOCK / 2 )
-        lcost_sh_prev = lcost_sh[shIdx + 2];// __shfl_up((int)lcost_sh_curr_H, 1, 32);
+		lcost_sh_next = lcost_sh[shIdx + 2];// __shfl_up((int)lcost_sh_curr_H, 1, 32);
     else
-        lcost_sh_prev = lcost_sh_curr_H;
+		lcost_sh_next = lcost_sh_curr_H;
 	
     if (shIdx - 1 > 0)
-        lcost_sh_next = lcost_sh[shIdx - 1];
+		lcost_sh_prev = lcost_sh[shIdx - 1];
     else
-        lcost_sh_next = lcost_sh_curr_L;
+		lcost_sh_prev = lcost_sh_curr_L;
     barrier(CLK_LOCAL_MEM_FENCE);
     
 	ushort2 v_cost0_L = lcost_sh_curr_L;
 	ushort2 v_cost0_H = lcost_sh_curr_H;
-    ushort2 v_cost1_L = (ushort2)(lcost_sh_curr_L.x, lcost_sh_prev.y);// , 0x5432);
-    ushort2 v_cost1_H = (ushort2)(lcost_sh_curr_H.x, lcost_sh_curr_L.y); // 0x5432);
+    ushort2 v_cost1_L = (ushort2)(lcost_sh_curr_L.y, lcost_sh_prev.x);// , 0x5432);
+    ushort2 v_cost1_H = (ushort2)(lcost_sh_curr_H.y, lcost_sh_curr_L.x); // 0x5432);
     
-    ushort2 v_cost2_L = (ushort2)(lcost_sh_curr_H.x, lcost_sh_curr_L.y);// 0x5432);
-    ushort2 v_cost2_H = (ushort2)(lcost_sh_next.x, lcost_sh_curr_H.y);//, 0x5432);
+    ushort2 v_cost2_L = (ushort2)(lcost_sh_curr_H.y, lcost_sh_curr_L.x);// 0x5432);
+    ushort2 v_cost2_H = (ushort2)(lcost_sh_next.y, lcost_sh_curr_H.x);//, 0x5432);
 
     ushort2 v_minCost = (ushort2)(minCost, minCost);//amd_bytealign(minCost, minCost, 0x1010);
     
@@ -379,10 +379,10 @@ inline int stereo_loop_128(
 	ushort2 cost_tmp_H = v_diff_H + min(v_tmp_a_H, v_tmp_b_H) - v_minCost;
     
     //itt lehet cserelgetni kell (x, y) -- (y, x)
-    d_scost[DISP_SIZE * idx + k * 4 + 0] += cost_tmp_L.x;
-    d_scost[DISP_SIZE * idx + k * 4 + 1] += cost_tmp_L.y;
-    d_scost[DISP_SIZE * idx + k * 4 + 2] += cost_tmp_H.x;
-    d_scost[DISP_SIZE * idx + k * 4 + 3] += cost_tmp_H.y;
+    d_scost[DISP_SIZE * idx + k * 4 + 0] += cost_tmp_L.y;
+    d_scost[DISP_SIZE * idx + k * 4 + 1] += cost_tmp_L.x;
+    d_scost[DISP_SIZE * idx + k * 4 + 2] += cost_tmp_H.y;
+    d_scost[DISP_SIZE * idx + k * 4 + 3] += cost_tmp_H.x;
 	//uint2 cost_tmp_32x2;
 	//cost_tmp_32x2.x = cost_tmp_L;
 	//cost_tmp_32x2.y = cost_tmp_H;

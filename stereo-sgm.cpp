@@ -4,7 +4,7 @@
 #include <fstream>
 
 std::string cl_file_name = "sgm-program.cl";
-int platform_index = 0;
+int platform_index = 1;
 int device_index = 0;
 
 const char * cl_error_strings_helper[] =
@@ -134,7 +134,7 @@ void StereoSGM::execute(void * left_data, void * right_data, void * output_buffe
 
 	scan_cost();
 	m_err = m_command_queue.finish();
-
+	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 	winner_takes_all();
 	m_err = m_command_queue.finish();
 
@@ -409,8 +409,8 @@ void StereoSGM::scan_cost()
 		cl::NDRange(32 * m_height / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_0_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-	
-	
+	//
+	//
 	cl::Event scan_cost_4_event;
 	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_horizontal_dir_kernel_4, cl::NDRange(0, 0, 0),
 		cl::NDRange(32 * m_height / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
@@ -435,20 +435,20 @@ void StereoSGM::scan_cost()
 		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_1_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-
+	
 	cl::Event scan_cost_3_event;
 	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_3, cl::NDRange(0, 0, 0),
 		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_3_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-
-
+	
+	
 	cl::Event scan_cost_5_event;
 	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_5, cl::NDRange(0, 0, 0),
 		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
 		cl::NDRange(32, PATHS_IN_BLOCK), nullptr, &scan_cost_5_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-
+	
 	cl::Event scan_cost_7_event;
 	m_err = m_command_queue.enqueueNDRangeKernel(m_compute_stereo_oblique_dir_kernel_7, cl::NDRange(0, 0, 0),
 		cl::NDRange(32 * obl_num_paths / PATHS_IN_BLOCK, PATHS_IN_BLOCK),
