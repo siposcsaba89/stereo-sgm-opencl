@@ -27,7 +27,7 @@ kernel void test()
 
 #define USE_ATOMIC
 
-kernel void census_kernel(int hor, int vert, global uchar * d_source, global ulong* d_dest, int width, int height)
+kernel void census_kernel(global const uchar * d_source, global ulong* d_dest, int width, int height)
 {
 	const int i = get_global_id(1); //threadIdx.y + blockIdx.y * blockDim.y;
 	const int j = get_global_id(0);//threadIdx.x + blockIdx.x * blockDim.x;
@@ -290,6 +290,26 @@ inline int min_warp(local ushort * minCostNext)
     return  minCostNext[get_local_id(1) * 32];
 }
 
+
+inline int min_warp_int(local int * values)
+{
+	int local_index = get_local_id(0) + get_local_id(1) * 32;
+	barrier(CLK_LOCAL_MEM_FENCE);
+	for (int offset = 32 / 2;
+		offset > 0;
+		offset = offset / 2) {
+		if (get_local_id(0) < offset) {
+			int other = values[local_index + offset];
+			int mine = values[local_index];
+			values[local_index] = (mine < other) ? mine : other;
+		}
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+
+	return  values[get_local_id(1) * 32];
+}
+
+
 inline int stereo_loop_128(
 	int i, int j, global const uchar4 *  d_matching_cost,
 	global uint16_t *d_scost, int width, int height, ushort2 minCost, local ushort2 *lcost_sh,
@@ -393,4 +413,301 @@ kernel void compute_stereo_horizontal_dir_kernel_0(
     for (int j = 0; j < width; j++) {
 		minCost = stereo_loop_128(get_idx_y_0(height, i), get_idx_x_0(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
 	}
+}
+
+kernel void compute_stereo_horizontal_dir_kernel_4(
+	global const uchar4 * d_matching_cost, global uint16_t *d_scost, int width, int height)
+{
+	local ushort2 lcost_sh[DISP_SIZE * PATHS_IN_BLOCK / 2];
+	local ushort minCostNext[32 * PATHS_IN_BLOCK];
+
+	init_lcost_sh_128(lcost_sh);
+	int i = get_group_id(0) * PATHS_IN_BLOCK + get_local_id(1);
+	ushort2 minCost = (ushort2)0;
+#pragma unroll
+	for (int j = 0; j < width; j++) {
+		minCost = stereo_loop_128(get_idx_y_4(height, i), get_idx_x_4(width, j), d_matching_cost, d_scost, width, height, minCost, lcost_sh, minCostNext);
+	}
+}
+#define WTA_PIXEL_IN_BLOCK 8
+
+
+kernel void winner_takes_all_kernel128(global ushort * leftDisp, global ushort * rightDisp, global const ushort * d_cost, int width, int height)
+{
+	const float uniqueness = 0.95f;
+
+	int idx = get_local_id(0);
+	int x = get_group_id(0) * WTA_PIXEL_IN_BLOCK + get_local_id(1);
+	int y = get_group_id(1);
+
+	const unsigned cost_offset = DISP_SIZE * (y * width + x);
+	global const ushort* current_cost = d_cost + cost_offset;
+	
+	local ushort tmp_costs_block[DISP_SIZE * WTA_PIXEL_IN_BLOCK];
+	local ushort * tmp_costs = tmp_costs_block + DISP_SIZE * get_local_id(1);
+
+	uint32_t tmp_cL1, tmp_cL2; uint32_t tmp_cL3, tmp_cL4;
+	uint32_t tmp_cR1, tmp_cR2; uint32_t tmp_cR3, tmp_cR4;
+
+	// right (1)
+	const int idx_1 = idx * 4 + 0;
+	const int idx_2 = idx * 4 + 1;
+	const int idx_3 = idx * 4 + 2;
+	const int idx_4 = idx * 4 + 3;
+
+	// TODO optimize global memory loads
+	tmp_costs[idx_1] = ((x + (idx_1)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_1)) + idx_1]; // d_cost[y][x + idx0][idx0]
+	tmp_costs[idx_2] = ((x + (idx_2)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_2)) + idx_2];
+	tmp_costs[idx_3] = ((x + (idx_3)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_3)) + idx_3];
+	tmp_costs[idx_4] = ((x + (idx_4)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_4)) + idx_4];
+
+	tmp_costs[idx_1] = d_cost[DISP_SIZE * (y * width + (x + idx_1)) + idx_1]; // d_cost[y][x + idx0][idx0]
+
+
+	ushort4 tmp_vcL1 = vload4(0, current_cost + idx_1);
+	//const uint2 idx_v = make_uint2((idx_2 << 16) | idx_1, (idx_4 << 16) | idx_3);
+	//ushort4 idx_v = (ushort4)(idx_1, idx_2 , idx_3, idx_4);
+
+	tmp_cR1 = tmp_costs[idx_1];
+	tmp_cR2 = tmp_costs[idx_2];
+	tmp_cR3 = tmp_costs[idx_3];
+	tmp_cR4 = tmp_costs[idx_4];
+
+	tmp_cL1 = (tmp_vcL1.x << 16) + idx_1;// __byte_perm(idx_v.x, tmp_vcL1.x, 0x5410);
+	tmp_cL2 = (tmp_vcL1.y << 16) + idx_2;//__byte_perm(idx_v.x, tmp_vcL1.x, 0x7632);
+	tmp_cL3 = (tmp_vcL1.z << 16) + idx_3; //__byte_perm(idx_v.y, tmp_vcL1.y, 0x5410);
+	tmp_cL4 = (tmp_vcL1.w << 16) + idx_4; //__byte_perm(idx_v.y, tmp_vcL1.y, 0x7632);
+
+	tmp_cR1 = (tmp_cR1 << 16) + idx_1;
+	tmp_cR2 = (tmp_cR2 << 16) + idx_2;
+	tmp_cR3 = (tmp_cR3 << 16) + idx_3;
+	tmp_cR4 = (tmp_cR4 << 16) + idx_4;
+	//////////////////////////////////////
+
+	local int valL1[32 * WTA_PIXEL_IN_BLOCK];
+
+	valL1[idx + get_local_id(1) * 32] = min(min(tmp_cL1, tmp_cL2), min(tmp_cL3, tmp_cL4));
+	int minTempL1 = min_warp_int(valL1);
+
+	int minCostL1 = (minTempL1 >> 16);
+	int minDispL1 = minTempL1 & 0xffff;
+	//////////////////////////////////////
+	if (idx_1 + x >= width || idx_1 == minDispL1) { tmp_cL1 = 0x7fffffff; }
+	if (idx_2 + x >= width || idx_2 == minDispL1) { tmp_cL2 = 0x7fffffff; }
+	if (idx_3 + x >= width || idx_3 == minDispL1) { tmp_cL3 = 0x7fffffff; }
+	if (idx_4 + x >= width || idx_4 == minDispL1) { tmp_cL4 = 0x7fffffff; }
+
+	valL1[idx + get_local_id(1) * 32] = min(min(tmp_cL1, tmp_cL2), min(tmp_cL3, tmp_cL4));
+	int minTempL2 = min_warp_int(valL1);
+	int minCostL2 = (minTempL2 >> 16);
+	int minDispL2 = minTempL2 & 0xffff;
+	minDispL2 = minDispL2 == 0xffff ? -1 : minDispL2;
+	//////////////////////////////////////
+
+	if (idx_1 + x >= width) { tmp_cR1 = 0x7fffffff; }
+	if (idx_2 + x >= width) { tmp_cR2 = 0x7fffffff; }
+	if (idx_3 + x >= width) { tmp_cR3 = 0x7fffffff; }
+	if (idx_4 + x >= width) { tmp_cR4 = 0x7fffffff; }
+
+	valL1[idx + get_local_id(1) * 32] = min(min(tmp_cR1, tmp_cR2), min(tmp_cR3, tmp_cR4));
+	int minTempR1 = min_warp_int(valL1);
+
+	int minCostR1 = (minTempR1 >> 16);
+	int minDispR1 = minTempR1 & 0xffff;
+	if (minDispR1 == 0xffff) { minDispR1 = -1; }
+	///////////////////////////////////////////////////////////////////////////////////
+	// right (2)
+	tmp_costs[idx_1] = ((idx_1) == minDispR1 || (x + (idx_1)) >= width) ? 0xffff : tmp_costs[idx_1];
+	tmp_costs[idx_2] = ((idx_2) == minDispR1 || (x + (idx_2)) >= width) ? 0xffff : tmp_costs[idx_2];
+	tmp_costs[idx_3] = ((idx_3) == minDispR1 || (x + (idx_3)) >= width) ? 0xffff : tmp_costs[idx_3];
+	tmp_costs[idx_4] = ((idx_4) == minDispR1 || (x + (idx_4)) >= width) ? 0xffff : tmp_costs[idx_4];
+
+	tmp_cR1 = tmp_costs[idx_1];
+	tmp_cR1 = (tmp_cR1 << 16) + idx_1;
+
+	tmp_cR2 = tmp_costs[idx_2];
+	tmp_cR2 = (tmp_cR2 << 16) + idx_2;
+
+	tmp_cR3 = tmp_costs[idx_3];
+	tmp_cR3 = (tmp_cR3 << 16) + idx_3;
+
+	tmp_cR4 = tmp_costs[idx_4];
+	tmp_cR4 = (tmp_cR4 << 16) + idx_4;
+
+	if (idx_1 + x >= width || idx_1 == minDispR1) { tmp_cR1 = 0x7fffffff; }
+	if (idx_2 + x >= width || idx_2 == minDispR1) { tmp_cR2 = 0x7fffffff; }
+	if (idx_3 + x >= width || idx_3 == minDispR1) { tmp_cR3 = 0x7fffffff; }
+	if (idx_4 + x >= width || idx_4 == minDispR1) { tmp_cR4 = 0x7fffffff; }
+
+	valL1[idx + get_local_id(1) * 32] = min(min(tmp_cR1, tmp_cR2), min(tmp_cR3, tmp_cR4));
+	int minTempR2 = min_warp_int(valL1);
+	int minCostR2 = (minTempR2 >> 16);
+	int minDispR2 = minTempR2 & 0xffff;
+	if (minDispR2 == 0xffff) { minDispR2 = -1; }
+	///////////////////////////////////////////////////////////////////////////////////
+
+	if (idx == 0) {
+		float lhv = minCostL2 * uniqueness;
+		leftDisp[y * width + x] = (lhv < minCostL1 && abs(minDispL1 - minDispL2) > 1) ? 0 : minDispL1 + 1; // add "+1" 
+		float rhv = minCostR2 * uniqueness;
+		rightDisp[y * width + x] = (rhv < minCostR1 && abs(minDispR1 - minDispR2) > 1) ? 0 : minDispR1 + 1; // add "+1" 
+	}
+}
+
+
+kernel void check_consistency_kernel_left(
+	global ushort* d_leftDisp, global const ushort* d_rightDisp, 
+	global const uchar* d_left, int width, int height) {
+
+	const int j = get_global_id(0);
+	const int i = get_global_id(1);
+
+	// left-right consistency check, only on leftDisp, but could be done for rightDisp too
+
+	uchar mask = d_left[i * width + j];
+	int d = d_leftDisp[i * width + j];
+	int k = j - d;
+	if (mask == 0 || d <= 0 || (k >= 0 && k < width && abs(d_rightDisp[i * width + k] - d) > 1)) {
+		// masked or left-right inconsistent pixel -> invalid
+		d_leftDisp[i * width + j] = 0;
+	}
+}
+
+
+// clamp condition
+inline int clampBC(const int x, const int y, const int nx, const int ny)
+{
+	const int idx = clamp(x, 0, nx - 1);
+	const int idy = clamp(y, 0, ny - 1);
+	return idx + idy * nx;
+}
+
+__kernel void median3x3(
+	const __global ushort* restrict input,
+	__global ushort* restrict output,
+	const int nx,
+	const int ny
+)
+{
+	const int idx = get_global_id(0);
+	const int idy = get_global_id(1);
+	const int id = idx + idy * nx;
+
+	if (idx >= nx || idy >= ny)
+		return;
+
+	ushort window[9];
+
+	window[0] = input[clampBC(idx - 1, idy - 1, nx, ny)];
+	window[1] = input[clampBC(idx, idy - 1, nx, ny)];
+	window[2] = input[clampBC(idx + 1, idy - 1, nx, ny)];
+
+	window[3] = input[clampBC(idx - 1, idy, nx, ny)];
+	window[4] = input[clampBC(idx, idy, nx, ny)];
+	window[5] = input[clampBC(idx + 1, idy, nx, ny)];
+
+	window[6] = input[clampBC(idx - 1, idy + 1, nx, ny)];
+	window[7] = input[clampBC(idx, idy + 1, nx, ny)];
+	window[8] = input[clampBC(idx + 1, idy + 1, nx, ny)];
+
+	// perform partial bitonic sort to find current median
+	ushort flMin = min(window[0], window[1]);
+	ushort flMax = max(window[0], window[1]);
+	window[0] = flMin;
+	window[1] = flMax;
+
+	flMin = min(window[3], window[2]);
+	flMax = max(window[3], window[2]);
+	window[3] = flMin;
+	window[2] = flMax;
+
+	flMin = min(window[2], window[0]);
+	flMax = max(window[2], window[0]);
+	window[2] = flMin;
+	window[0] = flMax;
+
+	flMin = min(window[3], window[1]);
+	flMax = max(window[3], window[1]);
+	window[3] = flMin;
+	window[1] = flMax;
+
+	flMin = min(window[1], window[0]);
+	flMax = max(window[1], window[0]);
+	window[1] = flMin;
+	window[0] = flMax;
+
+	flMin = min(window[3], window[2]);
+	flMax = max(window[3], window[2]);
+	window[3] = flMin;
+	window[2] = flMax;
+
+	flMin = min(window[5], window[4]);
+	flMax = max(window[5], window[4]);
+	window[5] = flMin;
+	window[4] = flMax;
+
+	flMin = min(window[7], window[8]);
+	flMax = max(window[7], window[8]);
+	window[7] = flMin;
+	window[8] = flMax;
+
+	flMin = min(window[6], window[8]);
+	flMax = max(window[6], window[8]);
+	window[6] = flMin;
+	window[8] = flMax;
+
+	flMin = min(window[6], window[7]);
+	flMax = max(window[6], window[7]);
+	window[6] = flMin;
+	window[7] = flMax;
+
+	flMin = min(window[4], window[8]);
+	flMax = max(window[4], window[8]);
+	window[4] = flMin;
+	window[8] = flMax;
+
+	flMin = min(window[4], window[6]);
+	flMax = max(window[4], window[6]);
+	window[4] = flMin;
+	window[6] = flMax;
+
+	flMin = min(window[5], window[7]);
+	flMax = max(window[5], window[7]);
+	window[5] = flMin;
+	window[7] = flMax;
+
+	flMin = min(window[4], window[5]);
+	flMax = max(window[4], window[5]);
+	window[4] = flMin;
+	window[5] = flMax;
+
+	flMin = min(window[6], window[7]);
+	flMax = max(window[6], window[7]);
+	window[6] = flMin;
+	window[7] = flMax;
+
+	flMin = min(window[0], window[8]);
+	flMax = max(window[0], window[8]);
+	window[0] = flMin;
+	window[8] = flMax;
+
+	window[4] = max(window[0], window[4]);
+	window[5] = max(window[1], window[5]);
+
+	window[6] = max(window[2], window[6]);
+	window[7] = max(window[3], window[7]);
+
+	window[4] = min(window[4], window[6]);
+	window[5] = min(window[5], window[7]);
+
+	output[id] = min(window[4], window[5]);
+}
+
+
+
+kernel void copy_u8_to_u16(global const uchar * input,
+	global ushort * output)
+{
+	int x = get_global_id(0);
+	output[x] = input[x];
 }
