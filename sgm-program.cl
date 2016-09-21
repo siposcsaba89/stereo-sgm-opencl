@@ -154,7 +154,7 @@ kernel void census_kernel(global const uchar * d_source, global ulong* d_dest, i
 }
 
 
-#define MCOST_LINES128 8
+#define MCOST_LINES128 2
 #define DISP_SIZE 128
 #define PATHS_IN_BLOCK 8
 
@@ -172,14 +172,14 @@ kernel void matching_cost_kernel_128(
 	int gr_x = get_group_id(0);
 	//int gr_y = get_group_id(1);
 
-	local uint64_t right_buf[(128 + 32) * MCOST_LINES128];
+	local uint64_t right_buf[(128 + 128) * MCOST_LINES128];
 	short y = gr_x * MCOST_LINES128 + loc_y;
-	short sh_offset = (128 + 32) * loc_y;
+	short sh_offset = (128 + 128) * loc_y;
 	{ // first 128 pixel
-#pragma unroll
-		for (short t = 0; t < 128; t += 32) {
-			right_buf[sh_offset + loc_x + t] = d_right[y * width + loc_x + t];
-		}
+//#pragma unroll
+		//for (short t = 0; t < 128; t += 64) {
+			right_buf[sh_offset + loc_x] = d_right[y * width + loc_x];
+		//}
 
 		//local uint64_t left_warp_0[32]; 
 		//left_warp_0[loc_x] = d_left[y * width + loc_x];
@@ -193,69 +193,69 @@ kernel void matching_cost_kernel_128(
 
 
 #pragma unroll
-		for (short x = 0; x < 32; x++) {
+		for (short x = 0; x < 128; x++) {
             uint64_t left_val = d_left[y * width + x];// left_warp_0[x];// shfl_u64(left_warp_0, x);
-#pragma unroll
-			for (short k = loc_x; k < DISP_SIZE; k += 32) {
-				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
-				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
+//#pragma unroll
+			//for (short k = loc_x; k < DISP_SIZE; k += 64) {
+				uint64_t right_val = x < loc_x ? 0 : right_buf[sh_offset + x - loc_x];
+				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + loc_x;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			}
+			//}
 		}
 
-#pragma unroll
-		for (short x = 32; x < 64; x++) {
-            uint64_t left_val = d_left[y * width + x];// left_warp_32[x - 32];// shfl_u64(left_warp_32, x);
-#pragma unroll
-			for (short k = loc_x; k < DISP_SIZE; k += 32) {
-				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
-				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
-				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			}
-		}
-
-#pragma unroll
-		for (short x = 64; x < 96; x++) {
-            uint64_t left_val = d_left[y * width + x];// left_warp_64[x - 64];// shfl_u64(left_warp_64, x);
-#pragma unroll
-			for (short k = loc_x; k < DISP_SIZE; k += 32) {
-				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
-				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
-				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			}
-		}
-
-#pragma unroll
-		for (short x = 96; x < 128; x++) {
-			uint64_t left_val = d_left[y * width + x];// shfl_u64(left_warp_96, x);
-#pragma unroll
-			for (short k = loc_x; k < DISP_SIZE; k += 32) {
-				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
-				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
-				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			}
-		}
+//#pragma unroll
+//		for (short x = 32; x < 64; x++) {
+//            uint64_t left_val = d_left[y * width + x];// left_warp_32[x - 32];// shfl_u64(left_warp_32, x);
+//#pragma unroll
+//			for (short k = loc_x; k < DISP_SIZE; k += 32) {
+//				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
+//				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
+//				d_cost[dst_idx] = popcount(left_val ^ right_val);
+//			}
+//		}
+//
+//#pragma unroll
+//		for (short x = 64; x < 96; x++) {
+//            uint64_t left_val = d_left[y * width + x];// left_warp_64[x - 64];// shfl_u64(left_warp_64, x);
+//#pragma unroll
+//			for (short k = loc_x; k < DISP_SIZE; k += 32) {
+//				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
+//				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
+//				d_cost[dst_idx] = popcount(left_val ^ right_val);
+//			}
+//		}
+//
+//#pragma unroll
+//		for (short x = 96; x < 128; x++) {
+//			uint64_t left_val = d_left[y * width + x];// shfl_u64(left_warp_96, x);
+//#pragma unroll
+//			for (short k = loc_x; k < DISP_SIZE; k += 32) {
+//				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
+//				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
+//				d_cost[dst_idx] = popcount(left_val ^ right_val);
+//			}
+//		}
 	} // end first 128 pix
 
 
 
-	for (short x = 128; x < width; x += 32) {
+	for (short x = 128; x < width; x += 128) {
 		//uint64_t left_warp = d_left[y * width + (x + loc_x)];
 		right_buf[sh_offset + loc_x + 128] = d_right[y * width + (x + loc_x)];
-		for (short xoff = 0; xoff < 32; xoff++) {
+		for (short xoff = 0; xoff < 128; xoff++) {
             uint64_t left_val = d_left[y * width + x + xoff];// 0;// shfl_u64(left_warp, xoff);
-#pragma unroll
-			for (short k = loc_x; k < DISP_SIZE; k += 32) {
-				uint64_t right_val = right_buf[sh_offset + 128 + xoff - k];
-				int dst_idx = y * (width * DISP_SIZE) + (x + xoff) * DISP_SIZE + k;
+//#pragma unroll
+			//for (short k = loc_x; k < DISP_SIZE; k += 64) {
+				uint64_t right_val = right_buf[sh_offset + 128 + xoff - loc_x];
+				int dst_idx = y * (width * DISP_SIZE) + (x + xoff) * DISP_SIZE + loc_x;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			}
+			//}
 		}
         //32 elso elemet kidobjuk
-		right_buf[sh_offset + loc_x + 0] = right_buf[sh_offset +  loc_x + 32];
-		right_buf[sh_offset + loc_x + 32] = right_buf[sh_offset + loc_x + 64];
-		right_buf[sh_offset + loc_x + 64] = right_buf[sh_offset + loc_x + 96];
-		right_buf[sh_offset + loc_x + 96] = right_buf[sh_offset + loc_x + 128];
+		right_buf[sh_offset + loc_x + 0] = right_buf[sh_offset +  loc_x + 128];
+		//right_buf[sh_offset + loc_x + 64] = right_buf[sh_offset + loc_x + 128];
+		//right_buf[sh_offset + loc_x + 128] = right_buf[sh_offset + loc_x + 96];
+		//right_buf[sh_offset + loc_x + 96] = right_buf[sh_offset + loc_x + 128];
 	}
 }
 

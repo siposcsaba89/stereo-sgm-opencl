@@ -411,11 +411,11 @@ void StereoSGM::mem_init()
 
 void StereoSGM::matching_cost()
 {
-	int MCOST_LINES128 = 8;
+	int MCOST_LINES128 = 2;
 	cl::Event matching_cost_event;
 	cl_int m_err = m_command_queue.enqueueNDRangeKernel(m_matching_cost_kernel_128, cl::NDRange(0, 0, 0),
-		cl::NDRange(32 * m_height / MCOST_LINES128, MCOST_LINES128),
-		cl::NDRange(32, MCOST_LINES128), nullptr, &matching_cost_event);
+		cl::NDRange(128 * m_height / MCOST_LINES128, MCOST_LINES128),
+		cl::NDRange(128, MCOST_LINES128), nullptr, &matching_cost_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
