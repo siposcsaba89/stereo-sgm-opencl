@@ -173,11 +173,11 @@ kernel void matching_cost_kernel_128(
 	//int gr_y = get_group_id(1);
 
 	local uint64_t right_buf[(128 + 32) * MCOST_LINES128];
-	int y = gr_x * MCOST_LINES128 + loc_y;
-	int sh_offset = (128 + 32) * loc_y;
+	short y = gr_x * MCOST_LINES128 + loc_y;
+	short sh_offset = (128 + 32) * loc_y;
 	{ // first 128 pixel
 #pragma unroll
-		for (int t = 0; t < 128; t += 32) {
+		for (short t = 0; t < 128; t += 32) {
 			right_buf[sh_offset + loc_x + t] = d_right[y * width + loc_x + t];
 		}
 
@@ -193,10 +193,10 @@ kernel void matching_cost_kernel_128(
 
 
 #pragma unroll
-		for (int x = 0; x < 32; x++) {
+		for (short x = 0; x < 32; x++) {
             uint64_t left_val = d_left[y * width + x];// left_warp_0[x];// shfl_u64(left_warp_0, x);
 #pragma unroll
-			for (int k = loc_x; k < DISP_SIZE; k += 32) {
+			for (short k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
 				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
@@ -204,10 +204,10 @@ kernel void matching_cost_kernel_128(
 		}
 
 #pragma unroll
-		for (int x = 32; x < 64; x++) {
+		for (short x = 32; x < 64; x++) {
             uint64_t left_val = d_left[y * width + x];// left_warp_32[x - 32];// shfl_u64(left_warp_32, x);
 #pragma unroll
-			for (int k = loc_x; k < DISP_SIZE; k += 32) {
+			for (short k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
 				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
@@ -215,10 +215,10 @@ kernel void matching_cost_kernel_128(
 		}
 
 #pragma unroll
-		for (int x = 64; x < 96; x++) {
+		for (short x = 64; x < 96; x++) {
             uint64_t left_val = d_left[y * width + x];// left_warp_64[x - 64];// shfl_u64(left_warp_64, x);
 #pragma unroll
-			for (int k = loc_x; k < DISP_SIZE; k += 32) {
+			for (short k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
 				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
@@ -226,10 +226,10 @@ kernel void matching_cost_kernel_128(
 		}
 
 #pragma unroll
-		for (int x = 96; x < 128; x++) {
+		for (short x = 96; x < 128; x++) {
 			uint64_t left_val = d_left[y * width + x];// shfl_u64(left_warp_96, x);
 #pragma unroll
-			for (int k = loc_x; k < DISP_SIZE; k += 32) {
+			for (short k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = x < k ? 0 : right_buf[sh_offset + x - k];
 				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + k;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
@@ -239,13 +239,13 @@ kernel void matching_cost_kernel_128(
 
 
 
-	for (int x = 128; x < width; x += 32) {
+	for (short x = 128; x < width; x += 32) {
 		//uint64_t left_warp = d_left[y * width + (x + loc_x)];
 		right_buf[sh_offset + loc_x + 128] = d_right[y * width + (x + loc_x)];
-		for (int xoff = 0; xoff < 32; xoff++) {
+		for (short xoff = 0; xoff < 32; xoff++) {
             uint64_t left_val = d_left[y * width + x + xoff];// 0;// shfl_u64(left_warp, xoff);
 #pragma unroll
-			for (int k = loc_x; k < DISP_SIZE; k += 32) {
+			for (short k = loc_x; k < DISP_SIZE; k += 32) {
 				uint64_t right_val = right_buf[sh_offset + 128 + xoff - k];
 				int dst_idx = y * (width * DISP_SIZE) + (x + xoff) * DISP_SIZE + k;
 				d_cost[dst_idx] = popcount(left_val ^ right_val);
@@ -661,10 +661,10 @@ kernel void winner_takes_all_kernel128(global ushort * leftDisp, global ushort *
 	int minCostL1 = (minTempL1 >> 16);
 	int minDispL1 = minTempL1 & 0xffff;
 	//////////////////////////////////////
-	if (idx_1 + x >= width || idx_1 == minDispL1) { tmp_cL1 = 0x7fffffff; }
-	if (idx_2 + x >= width || idx_2 == minDispL1) { tmp_cL2 = 0x7fffffff; }
-	if (idx_3 + x >= width || idx_3 == minDispL1) { tmp_cL3 = 0x7fffffff; }
-	if (idx_4 + x >= width || idx_4 == minDispL1) { tmp_cL4 = 0x7fffffff; }
+	if (idx_1 == minDispL1) { tmp_cL1 = 0x7fffffff; }
+	if (idx_2 == minDispL1) { tmp_cL2 = 0x7fffffff; }
+	if (idx_3 == minDispL1) { tmp_cL3 = 0x7fffffff; }
+	if (idx_4 == minDispL1) { tmp_cL4 = 0x7fffffff; }
 
 	valL1[idx + get_local_id(1) * 32] = min(min(tmp_cL1, tmp_cL2), min(tmp_cL3, tmp_cL4));
 	int minTempL2 = min_warp_int(valL1);
@@ -879,4 +879,10 @@ kernel void copy_u8_to_u16(global const uchar * input,
 {
 	int x = get_global_id(0);
 	output[x] = input[x];
+}
+
+kernel void clear_buffer(global float8 * buff)
+{
+	int x = get_global_id(0);
+	buff[x] = (float8)0;
 }

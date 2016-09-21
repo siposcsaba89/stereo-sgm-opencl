@@ -52,6 +52,8 @@ private:
 	cl::Kernel m_median_3x3;
 
 	cl::Kernel m_copy_u8_to_u16;
+	cl::Kernel m_clear_buffer;
+
 
 	cl::Buffer d_src_left, d_src_right, d_left, d_right, d_matching_cost,
 		d_scost, d_left_disparity, d_right_disparity,

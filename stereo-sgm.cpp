@@ -252,6 +252,10 @@ void StereoSGM::initCL()
 	m_copy_u8_to_u16 = cl::Kernel(m_program, "copy_u8_to_u16", &m_err);
 	checkErr(m_err, "kernel");
 
+	m_clear_buffer = cl::Kernel(m_program, "clear_buffer", &m_err);
+	checkErr(m_err, "kernel");
+
+
 	d_src_left = cl::Buffer(m_context, CL_MEM_READ_ONLY, m_width * m_height);
 	d_src_right = cl::Buffer(m_context, CL_MEM_READ_ONLY, m_width * m_height);
 
@@ -378,16 +382,31 @@ void StereoSGM::census()
 
 void StereoSGM::mem_init()
 {
-	cl_int m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_left_disparity, 0, 0,
-		m_width * m_height * sizeof(uint16_t));
-	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-	m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_right_disparity, 0, 0,
-		m_width * m_height * sizeof(uint16_t));
-	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	//cl_int m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_left_disparity, 0, 0,
+	//	m_width * m_height * sizeof(uint16_t));
+	//checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	//m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_right_disparity, 0, 0,
+	//	m_width * m_height * sizeof(uint16_t));
+	//checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	//
+	//m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_scost, 0, 0,
+	//	m_width * m_height * sizeof(uint16_t) * m_max_disparity);
+	//checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 
-	m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_scost, 0, 0,
-		m_width * m_height * sizeof(uint16_t) * m_max_disparity);
-	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
+	m_clear_buffer.setArg(0, d_left_disparity);
+	m_command_queue.enqueueNDRangeKernel(m_clear_buffer, cl::NDRange(0, 0, 0),
+		cl::NDRange(m_width * m_height * sizeof(uint16_t) / 32),
+		cl::NDRange(256));
+	m_clear_buffer.setArg(0, d_right_disparity);
+	m_command_queue.enqueueNDRangeKernel(m_clear_buffer, cl::NDRange(0, 0, 0),
+		cl::NDRange(m_width * m_height * sizeof(uint16_t) / 32),
+		cl::NDRange(256));
+	
+	m_clear_buffer.setArg(0, d_scost);
+	m_command_queue.enqueueNDRangeKernel(m_clear_buffer, cl::NDRange(0, 0, 0),
+		cl::NDRange(m_width * m_height * sizeof(uint16_t) * m_max_disparity / 32),
+		cl::NDRange(256));
+
 }
 
 void StereoSGM::matching_cost()

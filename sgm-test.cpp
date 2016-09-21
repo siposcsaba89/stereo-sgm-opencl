@@ -61,8 +61,8 @@ int main(int argc, char* argv[]) {
 
 	cv::VideoCapture left_capture(left_filename_fmt);
 	cv::VideoCapture right_capture(right_filename_fmt);
-	left_capture.set(cv::CAP_PROP_POS_FRAMES, 3100.0);
-	right_capture.set(cv::CAP_PROP_POS_FRAMES, 3100.0);
+	left_capture.set(cv::CAP_PROP_POS_FRAMES, 0.0);
+	right_capture.set(cv::CAP_PROP_POS_FRAMES, 0.0);
 	// dangerous
 	/*char buf[1024];
 	sprintf(buf, left_filename_fmt.c_str(), 0);*/
@@ -217,9 +217,9 @@ int main(int argc, char* argv[]) {
 		ssgm.execute(left.data, right.data, disp.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
 		std::cout << clock() - st << std::endl;
 
-		cv::imshow("disp", disp * 256 );
+		cv::imshow("disp", (disp * 2) * 256);
 
-		int key = cv::waitKey(10);
+		int key = cv::waitKey(1);
 
 
 
