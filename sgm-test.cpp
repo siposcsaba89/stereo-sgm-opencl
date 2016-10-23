@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
 	left_capture >> left;
 	right_capture >> right;
 
-	int disp_size = 64;
+	int disp_size = 128;
 	if (argc >= 4) {
 		disp_size = atoi(argv[3]);
 	}
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
 	int frame_no = 0;
 	bool should_close = false;
 
-	while (!should_close) {
+    while ((!should_close && left_capture.read(img1c) && right_capture.read(img2c))) {
 
 		if (frame_no == max_frame) { frame_no = 0; }
 
@@ -176,9 +176,6 @@ int main(int argc, char* argv[]) {
 		//cv::Mat left = cv::imread(buf, CV_LOAD_IMAGE_GRAYSCALE);
 		//sprintf(buf, right_filename_fmt.c_str(), frame_no);
 		//cv::Mat right = cv::imread(buf, CV_LOAD_IMAGE_GRAYSCALE);
-
-		left_capture >> img1c;
-		right_capture >> img2c;
 
 		cv::cvtColor(img1c, left, CV_BGR2GRAY);
 		cv::cvtColor(img2c, right, CV_BGR2GRAY);

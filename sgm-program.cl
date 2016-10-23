@@ -630,7 +630,7 @@ kernel void winner_takes_all_kernel128(global ushort * leftDisp, global ushort *
 	tmp_costs[idx_3] = ((x + (idx_3)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_3)) + idx_3];
 	tmp_costs[idx_4] = ((x + (idx_4)) >= width) ? 0xffff : d_cost[DISP_SIZE * (y * width + (x + idx_4)) + idx_4];
 
-	tmp_costs[idx_1] = d_cost[DISP_SIZE * (y * width + (x + idx_1)) + idx_1]; // d_cost[y][x + idx0][idx0]
+	//tmp_costs[idx_1] = d_cost[DISP_SIZE * (y * width + (x + idx_1)) + idx_1]; // d_cost[y][x + idx0][idx0]
 
 
 	ushort4 tmp_vcL1 = vload4(0, current_cost + idx_1);
