@@ -1,4 +1,4 @@
-#include "stereo-sgm.h"
+#include "sgm-cl.h"
 #include <vector>
 #include <assert.h>
 #include <fstream>
@@ -87,24 +87,24 @@ void checkErr(cl_int err, const char * name)
 }
 
 
-StereoSGM::StereoSGM(int width, int height, int max_disp_size):
+StereoSGMCL::StereoSGMCL(int width, int height, int max_disp_size):
 	m_width(width), m_height(height), m_max_disparity(max_disp_size)
 {
 	initCL();
 }
 
 
-StereoSGM::~StereoSGM()
+StereoSGMCL::~StereoSGMCL()
 {
 }
 
-bool StereoSGM::init()
+bool StereoSGMCL::init()
 {
 	initCL();
 	return true;
 }
 
-void StereoSGM::execute(void * left_data, void * right_data, void * output_buffer)
+void StereoSGMCL::execute(void * left_data, void * right_data, void * output_buffer)
 {
 	cl_int m_err = m_command_queue.finish();
 	m_err = m_command_queue.enqueueWriteBuffer(d_src_left, true, 0, m_width * m_height, left_data);
@@ -151,7 +151,7 @@ void StereoSGM::execute(void * left_data, void * right_data, void * output_buffe
 
 }
 
-void StereoSGM::initCL()
+void StereoSGMCL::initCL()
 {
 	std::vector<cl::Platform> platform_list;
 	cl::Platform::get(&platform_list);
@@ -360,7 +360,7 @@ void StereoSGM::initCL()
 	m_copy_u8_to_u16.setArg(1, d_scost);
 }
 
-void StereoSGM::census()
+void StereoSGMCL::census()
 {
 	//setup kernels
 	m_census_kernel.setArg(0, d_src_left);
@@ -380,7 +380,7 @@ void StereoSGM::census()
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
-void StereoSGM::mem_init()
+void StereoSGMCL::mem_init()
 {
 	//cl_int m_err = m_command_queue.enqueueFillBuffer<cl_uchar>(d_left_disparity, 0, 0,
 	//	m_width * m_height * sizeof(uint16_t));
@@ -409,7 +409,7 @@ void StereoSGM::mem_init()
 
 }
 
-void StereoSGM::matching_cost()
+void StereoSGMCL::matching_cost()
 {
 	int MCOST_LINES128 = 2;
 	cl::Event matching_cost_event;
@@ -419,7 +419,7 @@ void StereoSGM::matching_cost()
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
-void StereoSGM::scan_cost()
+void StereoSGMCL::scan_cost()
 {
 	//census_event.wait();
 	static const int PATHS_IN_BLOCK = 8;
@@ -478,7 +478,7 @@ void StereoSGM::scan_cost()
 
 }
 
-void StereoSGM::winner_takes_all()
+void StereoSGMCL::winner_takes_all()
 {
 	const int WTA_PIXEL_IN_BLOCK = 8;
 	cl::Event winner_takes_it_all;
@@ -489,7 +489,7 @@ void StereoSGM::winner_takes_all()
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
-void StereoSGM::median()
+void StereoSGMCL::median()
 {
 	m_median_3x3.setArg(0, d_left_disparity);
 	m_median_3x3.setArg(1, d_tmp_left_disp);
@@ -512,7 +512,7 @@ void StereoSGM::median()
 
 }
 
-void StereoSGM::check_consistency_left()
+void StereoSGMCL::check_consistency_left()
 {
 	cl::Event check_consistency_kernel_left_ev;
 	cl_int m_err = m_command_queue.enqueueNDRangeKernel(m_check_consistency_left,

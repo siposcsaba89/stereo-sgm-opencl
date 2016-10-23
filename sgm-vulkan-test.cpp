@@ -13,7 +13,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
+#include <iomanip>
+#include <sstream>
 #include <stdlib.h>
 #include <iostream>
 #include <string>
@@ -21,7 +22,7 @@ limitations under the License.
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "opencv2/calib3d/calib3d.hpp"
-#include "stereo-sgm.h"
+#include "sgm-vulkan/sgm-vulkan.h"
 
 static void saveXYZ(const char* filename, const cv::Mat& mat)
 {
@@ -39,8 +40,7 @@ static void saveXYZ(const char* filename, const cv::Mat& mat)
 	fclose(fp);
 }
 
-#include <iomanip>
-#include <sstream>
+
 int main(int argc, char* argv[]) {
 
 	// imgleft%2509d.pgm imgright%2509d.pgm
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 	//r:\2016.09.20_stereo_montevideo\video110414137\%05d_img.png r:\2016.09.20_stereo_montevideo\video210414137\%2505d_img.png
 
 	if (argc < 3) {
-		std::cerr << "usage: stereosgm left_img_fmt right_img_fmt [disp_size] [max_frame_num]" << std::endl;
+		std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt [disp_size] [max_frame_num]" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
 	std::string left_filename_fmt, right_filename_fmt;
@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
 	float cy = (float)M1.at<double>(5);
 	float b_d = (float)cv::norm(T, cv::NORM_L2);
 
-	StereoSGM ssgm(width, height, disp_size);// , bits, 16, fl, cx, cy, b_d);
+	StereoSGMVULKAN ssgm(width, height, disp_size);// , bits, 16, fl, cx, cy, b_d);
 
 	uint16_t* d_output_buffer = nullptr;
 
@@ -337,4 +337,5 @@ int main(int argc, char* argv[]) {
 	}
 
 	delete d_output_buffer;
+    return 0;
 }

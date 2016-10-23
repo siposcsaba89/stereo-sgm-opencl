@@ -2,11 +2,11 @@
 
 #include <CL/cl.hpp>
 
-class StereoSGM
+class StereoSGMCL
 {
 public:
-	StereoSGM(int width, int height, int max_disp_size);
-	~StereoSGM();
+	StereoSGMCL(int width, int height, int max_disp_size);
+	~StereoSGMCL();
 	bool init();
 	void execute(void * left_data, void * right_data, void * output_buffer);
 private:

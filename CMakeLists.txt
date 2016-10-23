@@ -1,19 +1,22 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(sgm-opencl)
+project(stereo-sgm)
 
-
-find_package(OpenCL REQUIRED)
-
-add_library(sgm-opencl stereo-sgm.cpp stereo-sgm.h sgm-program.cl)
-add_library(::sgm-opencl ALIAS sgm-opencl)
-target_link_libraries(sgm-opencl PUBLIC ${OpenCL_LIBRARIES})
-target_include_directories(sgm-opencl PUBLIC ${OpenCL_INCLUDE_DIRS})
+option(BUILD_SGM_CL "Build sgm using opnecl!" ON)
+option(BUILD_SGM_VULKAN "Build sgm using VULKAN!" ON)
 
 find_package(OpenCV REQUIRED)
 
-add_executable(sgm-opencl-test sgm-test.cpp)
-target_link_libraries(sgm-opencl-test PRIVATE ::sgm-opencl ${OpenCV_LIBRARIES})
-target_include_directories(sgm-opencl-test PRIVATE ${OpenCV_INCLUDE_DIRS})
+if (BUILD_SGM_CL)
+    add_subdirectory(sgm-cl)
+    add_executable(sgm-cl-test sgm-cl-test.cpp)
+    target_link_libraries(sgm-cl-test PRIVATE ::sgm-cl ${OpenCV_LIBRARIES})
+    target_include_directories(sgm-cl-test PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
 
-#export(targets sgm-opencl)
+if (BUILD_SGM_VULKAN)
+    add_subdirectory(sgm-vulkan)
+    add_executable(sgm-vulkan-test sgm-vulkan-test.cpp)
+    target_link_libraries(sgm-vulkan-test PRIVATE ::sgm-vulkan ${OpenCV_LIBRARIES})
+    target_include_directories(sgm-vulkan-test PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
