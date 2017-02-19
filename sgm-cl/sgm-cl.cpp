@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <fstream>
 
-std::string cl_file_name = "sgm-program.cl";
+std::string cl_file_name = "sgm-cl.cl";
 int platform_index = 1;
 int device_index = 0;
 
@@ -177,6 +177,14 @@ void StereoSGMCL::initCL()
 	std::string device_name;
 	m_device.getInfo(CL_DEVICE_NAME, &device_name);
 	printf("Selected device: %s \n", device_name.c_str());
+    std::string dev_exts;
+    m_device.getInfo(CL_DEVICE_EXTENSIONS, &dev_exts);
+    printf("Extensions: \n %s \n",  dev_exts.c_str());
+    std::string dev_vers;
+    m_device.getInfo(CL_DEVICE_VERSION, &dev_vers);
+    printf("Extensions: \n %s \n", dev_vers.c_str());
+
+
 
 
 	cl_context_properties cprops[3] =
@@ -193,7 +201,6 @@ void StereoSGMCL::initCL()
 	);
 
 	checkErr(m_err, "Conext::Context()");
-
 	m_command_queue = cl::CommandQueue(m_context, m_device, 0, &m_err);
 	checkErr(m_err, "COMMAND QUEUE creation failed");
 	size_t max_wg_size = 0;
@@ -209,7 +216,7 @@ void StereoSGMCL::initCL()
 	cl::Program::Sources source(1,
 		std::make_pair(kernel_source.c_str(), kernel_source.size()));
 	m_program = cl::Program(m_context, source);
-	m_err = m_program.build({ m_device });
+	m_err = m_program.build({ m_device }, "-cl-std=CL2.0");
 	checkErr(m_err, "build kernel");
 
 	std::string build_log = m_program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(m_device);
@@ -411,11 +418,12 @@ void StereoSGMCL::mem_init()
 
 void StereoSGMCL::matching_cost()
 {
-	int MCOST_LINES128 = 2;
+	int MCOST_LINES128 = 4;
 	cl::Event matching_cost_event;
-	cl_int m_err = m_command_queue.enqueueNDRangeKernel(m_matching_cost_kernel_128, cl::NDRange(0, 0, 0),
-		cl::NDRange(128 * m_height / MCOST_LINES128, MCOST_LINES128),
-		cl::NDRange(128, MCOST_LINES128), nullptr, &matching_cost_event);
+	cl_int m_err = m_command_queue.enqueueNDRangeKernel(
+        m_matching_cost_kernel_128, cl::NDRange(0, 0, 0),
+		cl::NDRange(64 * m_height / MCOST_LINES128, MCOST_LINES128),
+		cl::NDRange(64, MCOST_LINES128), nullptr, &matching_cost_event);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
@@ -480,12 +488,12 @@ void StereoSGMCL::scan_cost()
 
 void StereoSGMCL::winner_takes_all()
 {
-	const int WTA_PIXEL_IN_BLOCK = 8;
+	const int WTA_PIXEL_IN_BLOCK = 4;
 	cl::Event winner_takes_it_all;
 	cl_int m_err = m_command_queue.enqueueNDRangeKernel(m_winner_takes_all_kernel128,
 		cl::NDRange(0, 0, 0),
-		cl::NDRange(32 * m_width / WTA_PIXEL_IN_BLOCK, WTA_PIXEL_IN_BLOCK * m_height),
-		cl::NDRange(32, WTA_PIXEL_IN_BLOCK), nullptr, &winner_takes_it_all);
+		cl::NDRange(64 * m_width / WTA_PIXEL_IN_BLOCK, WTA_PIXEL_IN_BLOCK * m_height),
+		cl::NDRange(64, WTA_PIXEL_IN_BLOCK), nullptr, &winner_takes_it_all);
 	checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
 }
 
