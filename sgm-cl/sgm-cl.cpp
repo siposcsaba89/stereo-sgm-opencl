@@ -2,6 +2,7 @@
 #include <vector>
 #include <assert.h>
 #include <fstream>
+#include <iostream>
 
 std::string cl_file_name = "sgm-cl.cl";
 int platform_index = 1;
@@ -203,6 +204,11 @@ void StereoSGMCL::initCL()
 
 	//reading the kernel source
 	std::ifstream f(cl_file_name);
+    if (!f.is_open())
+    {
+        std::cout << "Cannot open file: " << cl_file_name << std::endl;
+        exit(EXIT_FAILURE);
+    }
 	std::string kernel_source((std::istreambuf_iterator<char>(f)),
 		std::istreambuf_iterator<char>());
 

@@ -51,13 +51,16 @@ int main(int argc, char* argv[]) {
 
 	//r:\2016.09.20_stereo_montevideo\video110414137\%05d_img.png r:\2016.09.20_stereo_montevideo\video210414137\%2505d_img.png
 
-	if (argc < 3) {
-		std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt [disp_size] [max_frame_num]" << std::endl;
+	if (argc < 5) {
+		std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt intrinsics.yml extrinsics.yml [disp_size] [max_frame_num]" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
 	std::string left_filename_fmt, right_filename_fmt;
 	left_filename_fmt = argv[1];
 	right_filename_fmt = argv[2];
+
+    std::string extrinsic_filename = argv[4];//"d:/extrinsics.yml";
+    std::string intrinsic_filename = argv[3];//"d:/intrinsics.yml";
 
 	cv::VideoCapture left_capture(left_filename_fmt);
 	cv::VideoCapture right_capture(right_filename_fmt);
@@ -73,12 +76,12 @@ int main(int argc, char* argv[]) {
 	right_capture >> right;
 
 	int disp_size = 128;
-	if (argc >= 4) {
+	if (argc >= 6) {
 		disp_size = atoi(argv[3]);
 	}
 
 	int max_frame = 100;
-	if (argc >= 5) {
+	if (argc >= 7) {
 		max_frame = atoi(argv[4]);
 	}
 
@@ -89,9 +92,6 @@ int main(int argc, char* argv[]) {
 	}
 
 	cv::Size img_size = left.size();
-
-	std::string extrinsic_filename = "d:/extrinsics.yml";
-	std::string intrinsic_filename = "d:/intrinsics.yml";
 
 	cv::Rect roi1, roi2;
 	cv::Mat Q;
