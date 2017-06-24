@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 3.0)
 
+
 project(stereo-sgm)
 
 option(BUILD_SGM_CL "Build sgm using opnecl!" ON)
 option(BUILD_SGM_VULKAN "Build sgm using VULKAN!" OFF)
 
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+
+
 find_package(OpenCV REQUIRED)
+
 
 if (BUILD_SGM_CL)
     add_subdirectory(sgm-cl)

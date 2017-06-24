@@ -8,6 +8,7 @@ find_package(OpenCL REQUIRED)
 add_library(sgm-cl sgm-cl.cpp sgm-cl/sgm-cl.h sgm-cl/sgm-cl.cl)
 add_library(::sgm-cl ALIAS sgm-cl)
 set_target_properties(sgm-cl PROPERTIES DEBUG_POSTFIX _d)
+message(STATUS "OpenCL libraries ${OpenCL_LIBRARIES}")
 target_link_libraries(sgm-cl PUBLIC ${OpenCL_LIBRARIES})
 target_include_directories(sgm-cl 
     PUBLIC 
