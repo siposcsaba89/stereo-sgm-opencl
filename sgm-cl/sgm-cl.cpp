@@ -1,9 +1,9 @@
-#include "sgm-cl.h"
+#include "sgm-cl/sgm-cl.h"
 #include <vector>
 #include <assert.h>
 #include <fstream>
 
-std::string cl_file_name = "sgm-program.cl";
+std::string cl_file_name = "sgm-cl.cl";
 int platform_index = 1;
 int device_index = 0;
 
