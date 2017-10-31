@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 
 find_package(OpenCV REQUIRED)
-
+find_package(napalm REQUIRED)
 
 if (BUILD_SGM_CL)
     add_subdirectory(sgm-cl)
