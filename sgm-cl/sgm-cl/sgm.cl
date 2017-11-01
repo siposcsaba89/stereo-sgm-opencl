@@ -178,7 +178,10 @@ kernel void matching_cost_kernel_128(
 	{ // first 128 pixel
 //#pragma unroll
 		//for (short t = 0; t < 128; t += 64) {
-			right_buf[sh_offset + loc_x] = d_right[y * width + loc_x];
+        if (y < height && loc_x < width)
+            right_buf[sh_offset + loc_x] = d_right[y * width + loc_x];
+        else
+            right_buf[sh_offset + loc_x] = 0;
 		//}
 
 		//local uint64_t left_warp_0[32]; 
@@ -194,12 +197,15 @@ kernel void matching_cost_kernel_128(
 
 #pragma unroll
 		for (short x = 0; x < 128; x++) {
-            uint64_t left_val = d_left[y * width + x];// left_warp_0[x];// shfl_u64(left_warp_0, x);
-//#pragma unroll
-			//for (short k = loc_x; k < DISP_SIZE; k += 64) {
-				uint64_t right_val = x < loc_x ? 0 : right_buf[sh_offset + x - loc_x];
-				int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + loc_x;
-				d_cost[dst_idx] = popcount(left_val ^ right_val);
+            if (y < height && x < width)
+            {
+                uint64_t left_val = d_left[y * width + x];// left_warp_0[x];// shfl_u64(left_warp_0, x);
+    //#pragma unroll
+                //for (short k = loc_x; k < DISP_SIZE; k += 64) {
+                uint64_t right_val = x < loc_x ? 0 : right_buf[sh_offset + x - loc_x];
+                int dst_idx = y * (width * DISP_SIZE) + x * DISP_SIZE + loc_x;
+                d_cost[dst_idx] = popcount(left_val ^ right_val);
+            }
 			//}
 		}
 
@@ -240,22 +246,29 @@ kernel void matching_cost_kernel_128(
 
 
 	for (short x = 128; x < width; x += 128) {
-		//uint64_t left_warp = d_left[y * width + (x + loc_x)];
-		right_buf[sh_offset + loc_x + 128] = d_right[y * width + (x + loc_x)];
-		for (short xoff = 0; xoff < 128; xoff++) {
-            uint64_t left_val = d_left[y * width + x + xoff];// 0;// shfl_u64(left_warp, xoff);
-//#pragma unroll
-			//for (short k = loc_x; k < DISP_SIZE; k += 64) {
-				uint64_t right_val = right_buf[sh_offset + 128 + xoff - loc_x];
-				int dst_idx = y * (width * DISP_SIZE) + (x + xoff) * DISP_SIZE + loc_x;
-				d_cost[dst_idx] = popcount(left_val ^ right_val);
-			//}
-		}
-        //32 elso elemet kidobjuk
-		right_buf[sh_offset + loc_x + 0] = right_buf[sh_offset +  loc_x + 128];
-		//right_buf[sh_offset + loc_x + 64] = right_buf[sh_offset + loc_x + 128];
-		//right_buf[sh_offset + loc_x + 128] = right_buf[sh_offset + loc_x + 96];
-		//right_buf[sh_offset + loc_x + 96] = right_buf[sh_offset + loc_x + 128];
+        //if (y < height && x + loc_x < width)
+        {
+
+            //uint64_t left_warp = d_left[y * width + (x + loc_x)];
+            right_buf[sh_offset + loc_x + 128] = d_right[y * width + (x + loc_x)];
+            for (short xoff = 0; xoff < 128; xoff++) {
+                if (y < height && x + xoff < width)
+                {
+                    uint64_t left_val = d_left[y * width + x + xoff];// 0;// shfl_u64(left_warp, xoff);
+        //#pragma unroll
+                    //for (short k = loc_x; k < DISP_SIZE; k += 64) {
+                    uint64_t right_val = right_buf[sh_offset + 128 + xoff - loc_x];
+                    int dst_idx = y * (width * DISP_SIZE) + (x + xoff) * DISP_SIZE + loc_x;
+                    d_cost[dst_idx] = popcount(left_val ^ right_val);
+                }
+                //}
+            }
+            //32 elso elemet kidobjuk
+            right_buf[sh_offset + loc_x + 0] = right_buf[sh_offset + loc_x + 128];
+            //right_buf[sh_offset + loc_x + 64] = right_buf[sh_offset + loc_x + 128];
+            //right_buf[sh_offset + loc_x + 128] = right_buf[sh_offset + loc_x + 96];
+            //right_buf[sh_offset + loc_x + 96] = right_buf[sh_offset + loc_x + 128];
+        }
 	}
 }
 

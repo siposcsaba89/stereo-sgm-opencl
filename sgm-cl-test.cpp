@@ -177,8 +177,17 @@ int main(int argc, char* argv[]) {
 		//sprintf(buf, right_filename_fmt.c_str(), frame_no);
 		//cv::Mat right = cv::imread(buf, CV_LOAD_IMAGE_GRAYSCALE);
 
-		cv::cvtColor(img1c, left, CV_BGR2GRAY);
-		cv::cvtColor(img2c, right, CV_BGR2GRAY);
+        if (img1c.channels() != 1)
+        {
+            cv::cvtColor(img1c, left, CV_BGR2GRAY);
+            cv::cvtColor(img2c, right, CV_BGR2GRAY);
+        }
+        else
+        {
+            left = img1c;
+            right = img2c;
+        }
+
 		//cv::cvtColor(img1c, left, CV_BayerRG2GRAY);
 		//cv::cvtColor(img2c, right, CV_BayerRG2GRAY);
 

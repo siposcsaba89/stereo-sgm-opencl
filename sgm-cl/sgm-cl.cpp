@@ -41,37 +41,41 @@ void StereoSGMCL::execute(void * left_data, void * right_data, void * output_buf
 {
     d_src_left->write(left_data);
     d_src_right->write(right_data);
-
-    census();
-
-    mem_init();
-
-    matching_cost();
-
     
-    //m_err = m_command_queue.enqueueNDRangeKernel(m_copy_u8_to_u16,
-    //	cl::NDRange(0, 0, 0),
-    //	cl::NDRange(128 * m_width * m_height),
-    //	cl::NDRange(128));
-    //checkErr(m_err, (std::to_string(__LINE__) + __FILE__).c_str());
-
+    census();
+    
+    mem_init();
+    //m_context->finish(0);
+    matching_cost();
+    //m_context->finish(0);
+    
+    
+    //(*m_copy_u8_to_u16)(0,
+    //	m_width * m_height,
+    //	128);
+    //m_context->finish(0);
+    
     scan_cost();
-
+    
     winner_takes_all();
-
+    //m_context->finish(0);
+    
     median();
-
+    //m_context->finish(0);
+    
     check_consistency_left();
-
+    m_context->finish(0);
+    
     d_tmp_left_disp->read(output_buffer);
-
+    //m_context->finish(0);
+    
 }
 
 void StereoSGMCL::initCL()
 {
     if (m_context == nullptr)
     {
-        m_context = napalm::ContextManager::getContextManager().getDefault();
+        m_context = napalm::ContextManager::getContextManager().getDefault("OpenCL", 0, 0);
     }
 
     napalm::gen::sgm pr(*napalm::ProgramStore::create(m_context));
@@ -122,7 +126,7 @@ void StereoSGMCL::initCL()
     //setup kernels
     m_census_kernel->setArgs(d_src_left, d_left, m_width, m_height);
 
-    m_matching_cost_kernel_128->setArgs(d_src_right, d_right, d_matching_cost, m_width, m_height);
+    m_matching_cost_kernel_128->setArgs(d_left, d_right, d_matching_cost, m_width, m_height);
 
     m_compute_stereo_horizontal_dir_kernel_0->setArgs(d_matching_cost, d_scost, m_width, m_height);
 
@@ -157,11 +161,12 @@ void StereoSGMCL::census()
     //setup kernels
     m_census_kernel->setArgs(d_src_left, d_left);
     (*m_census_kernel)(0, napalm::ImgRegion((m_width + 16 - 1) / 16, (m_height + 16 - 1) / 16),
-        16, 16);
-
+        napalm::ImgRegion(16, 16));
+    m_context->finish(0);
     m_census_kernel->setArgs(d_src_right, d_right);
     (*m_census_kernel)(0, napalm::ImgRegion((m_width + 16 - 1) / 16, (m_height + 16 - 1) / 16),
-        16, 16);
+        napalm::ImgRegion(16, 16));
+    m_context->finish(0);
 }
 
 void StereoSGMCL::mem_init()
