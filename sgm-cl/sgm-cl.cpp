@@ -75,7 +75,7 @@ void StereoSGMCL::initCL()
 {
     if (m_context == nullptr)
     {
-        m_context = napalm::ContextManager::getContextManager().getDefault("OpenCL", 0, 0);
+        m_context = napalm::ContextManager::getContextManager().getDefault("OpenCL", platform_index, device_index);
     }
 
     napalm::gen::sgm pr(*napalm::ProgramStore::create(m_context));
@@ -185,8 +185,8 @@ void StereoSGMCL::mem_init()
     m_clear_buffer->setArgs(d_left_disparity);
     (*m_clear_buffer)(0, napalm::ImgRegion(m_width * m_height * sizeof(uint16_t) / 32 / 256),
         napalm::ImgRegion(256));
-    m_clear_buffer->setArgs(d_right_disparity);
 
+    m_clear_buffer->setArgs(d_right_disparity);
     (*m_clear_buffer)(0, napalm::ImgRegion(m_width * m_height * sizeof(uint16_t) / 32 / 256),
         napalm::ImgRegion(256));
 
