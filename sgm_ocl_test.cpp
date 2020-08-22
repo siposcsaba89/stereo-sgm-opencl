@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
     float cy = (float)M1.at<double>(5);
     float b_d = (float)cv::norm(T, cv::NORM_L2);
 
-    StereoSGMCL ssgm(width, height, disp_size);// , bits, 16, fl, cx, cy, b_d);
+    StereoSGMCL ssgm(width, height, disp_size, 1, 0);// , bits, 16, fl, cx, cy, b_d);
 
     uint16_t* d_output_buffer = nullptr;
 
@@ -218,12 +218,17 @@ int main(int argc, char* argv[]) {
 
         //		ssgm.execute(left.data, right.data, (void**)&d_output_buffer, v_disp.data, v_disp_road.data(), u_disp.data, cu_disp.data,
         //			free_space.data(), free_space_voting_res.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
-        static cv::Mat disp(img_size, CV_16UC1);
+        static cv::Mat disp(img_size, CV_16UC1), disp_color, disp_8u;
 
         ssgm.execute(left.data, right.data, disp.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
         std::cout << clock() - st << std::endl;
 
-        cv::imshow("disp", (disp * 2) * 256);
+        disp.convertTo(disp_8u, CV_8U, 255. / disp_size);
+        cv::applyColorMap(disp_8u, disp_color, cv::COLORMAP_JET);
+        //disp_color.setTo(cv::Scalar(0, 0, 0), disp == invalid_disp);
+
+
+        cv::imshow("disp", disp_color);
         cv::imshow("left", left);
 
 

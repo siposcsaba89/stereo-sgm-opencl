@@ -2,6 +2,12 @@
 
 #include <CL/cl.h>
 
+
+// pixel and feature type defs
+#define pixel_type uint8_t
+#define feature_type uint32_t
+
+
 class StereoSGMCL
 {
 public:
@@ -37,7 +43,7 @@ private:
     int m_height = -1;
     int m_max_disparity = -1;
 
-    cl_kernel m_census_kernel;
+    cl_kernel m_census_transform_kernel;
     cl_kernel m_matching_cost_kernel_128;
 
     cl_kernel m_compute_stereo_horizontal_dir_kernel_0;
@@ -60,7 +66,7 @@ private:
     cl_kernel m_clear_buffer;
 
 
-    cl_mem d_src_left, d_src_right, d_left, d_right, d_matching_cost,
+    cl_mem d_src_left, d_src_right, d_left_census_cost, d_right_census_cost, d_matching_cost,
         d_scost, d_left_disparity, d_right_disparity,
         d_tmp_left_disp, d_tmp_right_disp;
 

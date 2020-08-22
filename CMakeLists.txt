@@ -9,7 +9,7 @@ option(BUILD_EXAMPLES "Build sgm ocl example" ON)
 
 find_package(OpenCL REQUIRED)
 
-add_library(libsgm_ocl src/libsgm_ocl.cpp libsgm_ocl/libsgm_ocl.h)
+add_library(libsgm_ocl src/libsgm_ocl.cpp libsgm_ocl/libsgm_ocl.h libsgm_ocl/sgm.cl)
 add_library(::libsgm_ocl ALIAS libsgm_ocl)
 
 set(PROGRAMS libsgm_ocl/sgm.cl)

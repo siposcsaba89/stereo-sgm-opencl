@@ -41,9 +41,9 @@ StereoSGMCL::~StereoSGMCL()
     //delete d_src_right;
     clReleaseMemObject(d_src_right);
     //delete d_left;
-    clReleaseMemObject(d_left);
+    clReleaseMemObject(d_left_census_cost);
     //delete d_right;
-    clReleaseMemObject(d_right);
+    clReleaseMemObject(d_right_census_cost);
     //delete d_matching_cost;
     clReleaseMemObject(d_matching_cost);
     //delete d_scost;
@@ -166,45 +166,45 @@ void StereoSGMCL::initCL()
     }
 
 
-    m_census_kernel = clCreateKernel(sgm_program, "census_kernel", &err);
+    m_census_transform_kernel = clCreateKernel(sgm_program, "census_transform_kernel", &err);
     CHECK_OCL_ERROR(err, "Create census_kernel")
-    m_matching_cost_kernel_128 = clCreateKernel(sgm_program, "matching_cost_kernel_128", & err);
-    CHECK_OCL_ERROR(err, "Create matching_cost_kernel_128")
-
-    m_compute_stereo_horizontal_dir_kernel_0 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_0", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_0");
-    m_compute_stereo_horizontal_dir_kernel_4 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_4", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_4");
-
-    m_compute_stereo_vertical_dir_kernel_2 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_2", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_vertical_dir_kernel_2");
-    m_compute_stereo_vertical_dir_kernel_6 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_6", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_vertical_dir_kernel_6");
-
-    m_compute_stereo_oblique_dir_kernel_1 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_1", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_1");
-    m_compute_stereo_oblique_dir_kernel_3 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_3", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_3");
-    m_compute_stereo_oblique_dir_kernel_5 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_5", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_5");
-    m_compute_stereo_oblique_dir_kernel_7 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_7", &err);
-    CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_7");
-
-
-    m_winner_takes_all_kernel128 = clCreateKernel(sgm_program, "winner_takes_all_kernel128", &err);
-    CHECK_OCL_ERROR(err, "Create winner_takes_all_kernel128");
-
-    m_check_consistency_left = clCreateKernel(sgm_program, "check_consistency_kernel_left", &err);
-    CHECK_OCL_ERROR(err, "Create check_consistency_kernel_left");
-
-    m_median_3x3 = clCreateKernel(sgm_program, "median3x3", &err);
-    CHECK_OCL_ERROR(err, "Create median3x3");
-
-    m_copy_u8_to_u16 = clCreateKernel(sgm_program, "copy_u8_to_u16", &err);
-    CHECK_OCL_ERROR(err, "Create copy_u8_to_u16");
-    
-    m_clear_buffer = clCreateKernel(sgm_program, "clear_buffer", &err);
-    CHECK_OCL_ERROR(err, "Create clear_buffer");
+    //m_matching_cost_kernel_128 = clCreateKernel(sgm_program, "matching_cost_kernel_128", & err);
+    //CHECK_OCL_ERROR(err, "Create matching_cost_kernel_128")
+    //
+    //m_compute_stereo_horizontal_dir_kernel_0 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_0", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_0");
+    //m_compute_stereo_horizontal_dir_kernel_4 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_4", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_4");
+    //
+    //m_compute_stereo_vertical_dir_kernel_2 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_2", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_vertical_dir_kernel_2");
+    //m_compute_stereo_vertical_dir_kernel_6 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_6", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_vertical_dir_kernel_6");
+    //
+    //m_compute_stereo_oblique_dir_kernel_1 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_1", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_1");
+    //m_compute_stereo_oblique_dir_kernel_3 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_3", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_3");
+    //m_compute_stereo_oblique_dir_kernel_5 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_5", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_5");
+    //m_compute_stereo_oblique_dir_kernel_7 =  clCreateKernel(sgm_program, "compute_stereo_oblique_dir_kernel_7", &err);
+    //CHECK_OCL_ERROR(err, "Create compute_stereo_oblique_dir_kernel_7");
+    //
+    //
+    //m_winner_takes_all_kernel128 = clCreateKernel(sgm_program, "winner_takes_all_kernel128", &err);
+    //CHECK_OCL_ERROR(err, "Create winner_takes_all_kernel128");
+    //
+    //m_check_consistency_left = clCreateKernel(sgm_program, "check_consistency_kernel_left", &err);
+    //CHECK_OCL_ERROR(err, "Create check_consistency_kernel_left");
+    //
+    //m_median_3x3 = clCreateKernel(sgm_program, "median3x3", &err);
+    //CHECK_OCL_ERROR(err, "Create median3x3");
+    //
+    //m_copy_u8_to_u16 = clCreateKernel(sgm_program, "copy_u8_to_u16", &err);
+    //CHECK_OCL_ERROR(err, "Create copy_u8_to_u16");
+    //
+    //m_clear_buffer = clCreateKernel(sgm_program, "clear_buffer", &err);
+    //CHECK_OCL_ERROR(err, "Create clear_buffer");
 
     d_src_left = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, m_width * m_height, nullptr, &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
@@ -214,9 +214,17 @@ void StereoSGMCL::initCL()
     d_src_right = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, m_width * m_height, nullptr, &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
 
-    d_left = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(uint64_t) * m_width * m_height, nullptr, &err);
+    d_left_census_cost = clCreateBuffer(m_cl_ctx,
+        CL_MEM_READ_WRITE,
+        sizeof(feature_type) * m_width * m_height,
+        nullptr,
+        &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
-    d_right = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(uint64_t) * m_width * m_height, nullptr, &err);
+    d_right_census_cost = clCreateBuffer(m_cl_ctx,
+        CL_MEM_READ_WRITE,
+        sizeof(feature_type) * m_width * m_height,
+        nullptr,
+        &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
 
     d_matching_cost = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, m_width * m_height * m_max_disparity, nullptr, &err);
@@ -239,84 +247,85 @@ void StereoSGMCL::initCL()
 
 
     //setup kernels
-    clSetKernelArg(m_census_kernel, 0, sizeof(cl_mem), &d_src_left);
-    clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &d_left);
-    clSetKernelArg(m_census_kernel, 2, sizeof(m_width), &m_width);
-    err = clSetKernelArg(m_census_kernel, 3, sizeof(m_height), &m_height);
+    err = clSetKernelArg(m_census_transform_kernel, 0, sizeof(cl_mem), &d_left_census_cost);
+    err = clSetKernelArg(m_census_transform_kernel, 1, sizeof(cl_mem), &d_src_left);
+    err = clSetKernelArg(m_census_transform_kernel, 2, sizeof(m_width), &m_width);
+    err = clSetKernelArg(m_census_transform_kernel, 3, sizeof(m_height), &m_height);
+    err = clSetKernelArg(m_census_transform_kernel, 4, sizeof(m_width), &m_width);
     CHECK_OCL_ERROR(err, "error settings parameters");
 
 
-    //m_matching_cost_kernel_128->setArgs(d_left, d_right, d_matching_cost, m_width, m_height);
-    clSetKernelArg(m_matching_cost_kernel_128, 0, sizeof(cl_mem), &d_left);
-    clSetKernelArg(m_matching_cost_kernel_128, 1, sizeof(cl_mem), &d_right);
-    clSetKernelArg(m_matching_cost_kernel_128, 2, sizeof(cl_mem), &d_matching_cost);
-    clSetKernelArg(m_matching_cost_kernel_128, 3, sizeof(m_width), &m_width);
-    err = clSetKernelArg(m_matching_cost_kernel_128, 4, sizeof(m_height), &m_height);
-    CHECK_OCL_ERROR(err, "error settings parameters");
-
-
-    auto setOptDirKernelsArgs = [&](cl_kernel kernel)
-    {
-        clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_matching_cost);
-        clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_scost);
-        clSetKernelArg(kernel, 2, sizeof(m_width), &m_width);
-        err = clSetKernelArg(kernel, 3, sizeof(m_height), &m_height);
-        CHECK_OCL_ERROR(err, "error settings parameters");
-    };
-
-
-    //m_compute_stereo_horizontal_dir_kernel_0->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_horizontal_dir_kernel_0);
-
-    //m_compute_stereo_horizontal_dir_kernel_4->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_horizontal_dir_kernel_4);
-
-    //m_compute_stereo_vertical_dir_kernel_2->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_vertical_dir_kernel_2);
-
-    //m_compute_stereo_vertical_dir_kernel_6->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_vertical_dir_kernel_6);
+    ////m_matching_cost_kernel_128->setArgs(d_left, d_right, d_matching_cost, m_width, m_height);
+    //clSetKernelArg(m_matching_cost_kernel_128, 0, sizeof(cl_mem), &d_left);
+    //clSetKernelArg(m_matching_cost_kernel_128, 1, sizeof(cl_mem), &d_right);
+    //clSetKernelArg(m_matching_cost_kernel_128, 2, sizeof(cl_mem), &d_matching_cost);
+    //clSetKernelArg(m_matching_cost_kernel_128, 3, sizeof(m_width), &m_width);
+    //err = clSetKernelArg(m_matching_cost_kernel_128, 4, sizeof(m_height), &m_height);
+    //CHECK_OCL_ERROR(err, "error settings parameters");
     //
-    //m_compute_stereo_oblique_dir_kernel_1->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_1);
-
-    //m_compute_stereo_oblique_dir_kernel_3->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_3);
-
-    //m_compute_stereo_oblique_dir_kernel_5->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_5);
-
-    //m_compute_stereo_oblique_dir_kernel_7->setArgs(d_matching_cost, d_scost, m_width, m_height);
-    setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_7);
-
-
-    //m_winner_takes_all_kernel128->setArgs(d_left_disparity, d_right_disparity, d_scost, m_width, m_height);
-    clSetKernelArg(m_winner_takes_all_kernel128, 0, sizeof(cl_mem), &d_left_disparity);
-    clSetKernelArg(m_winner_takes_all_kernel128, 1, sizeof(cl_mem), &d_right_disparity);
-    clSetKernelArg(m_winner_takes_all_kernel128, 2, sizeof(cl_mem), &d_scost);
-    clSetKernelArg(m_winner_takes_all_kernel128, 3, sizeof(m_width), &m_width);
-    err = clSetKernelArg(m_winner_takes_all_kernel128, 4, sizeof(m_height), &m_height);
-    CHECK_OCL_ERROR(err, "error settings parameters");
-
-    //m_check_consistency_left->setArgs(d_tmp_left_disp, d_tmp_right_disp, d_src_left, m_width, m_height);
-    clSetKernelArg(m_check_consistency_left, 0, sizeof(cl_mem), &d_tmp_left_disp);
-    clSetKernelArg(m_check_consistency_left, 1, sizeof(cl_mem), &d_tmp_right_disp);
-    clSetKernelArg(m_check_consistency_left, 2, sizeof(cl_mem), &d_src_left);
-    clSetKernelArg(m_check_consistency_left, 3, sizeof(m_width), &m_width);
-    err = clSetKernelArg(m_check_consistency_left, 4, sizeof(m_height), &m_height);
-    CHECK_OCL_ERROR(err, "error settings parameters");
-
-    //m_median_3x3->setArgs(d_left_disparity, d_tmp_left_disp, m_width, m_height);
-    clSetKernelArg(m_median_3x3, 0, sizeof(cl_mem), &d_left_disparity);
-    clSetKernelArg(m_median_3x3, 1, sizeof(cl_mem), &d_tmp_left_disp);
-    clSetKernelArg(m_median_3x3, 2, sizeof(m_width), &m_width);
-    err = clSetKernelArg(m_median_3x3, 3, sizeof(m_height), &m_height);
-    CHECK_OCL_ERROR(err, "error settings parameters");
-
-    //todo check boundary
-    //m_copy_u8_to_u16->setArgs(d_matching_cost, d_scost);
-    clSetKernelArg(m_copy_u8_to_u16, 0, sizeof(cl_mem), &d_matching_cost);
-    clSetKernelArg(m_copy_u8_to_u16, 1, sizeof(cl_mem), &d_scost);
+    //
+    //auto setOptDirKernelsArgs = [&](cl_kernel kernel)
+    //{
+    //    clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_matching_cost);
+    //    clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_scost);
+    //    clSetKernelArg(kernel, 2, sizeof(m_width), &m_width);
+    //    err = clSetKernelArg(kernel, 3, sizeof(m_height), &m_height);
+    //    CHECK_OCL_ERROR(err, "error settings parameters");
+    //};
+    //
+    //
+    ////m_compute_stereo_horizontal_dir_kernel_0->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_horizontal_dir_kernel_0);
+    //
+    ////m_compute_stereo_horizontal_dir_kernel_4->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_horizontal_dir_kernel_4);
+    //
+    ////m_compute_stereo_vertical_dir_kernel_2->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_vertical_dir_kernel_2);
+    //
+    ////m_compute_stereo_vertical_dir_kernel_6->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_vertical_dir_kernel_6);
+    ////
+    ////m_compute_stereo_oblique_dir_kernel_1->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_1);
+    //
+    ////m_compute_stereo_oblique_dir_kernel_3->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_3);
+    //
+    ////m_compute_stereo_oblique_dir_kernel_5->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_5);
+    //
+    ////m_compute_stereo_oblique_dir_kernel_7->setArgs(d_matching_cost, d_scost, m_width, m_height);
+    //setOptDirKernelsArgs(m_compute_stereo_oblique_dir_kernel_7);
+    //
+    //
+    ////m_winner_takes_all_kernel128->setArgs(d_left_disparity, d_right_disparity, d_scost, m_width, m_height);
+    //clSetKernelArg(m_winner_takes_all_kernel128, 0, sizeof(cl_mem), &d_left_disparity);
+    //clSetKernelArg(m_winner_takes_all_kernel128, 1, sizeof(cl_mem), &d_right_disparity);
+    //clSetKernelArg(m_winner_takes_all_kernel128, 2, sizeof(cl_mem), &d_scost);
+    //clSetKernelArg(m_winner_takes_all_kernel128, 3, sizeof(m_width), &m_width);
+    //err = clSetKernelArg(m_winner_takes_all_kernel128, 4, sizeof(m_height), &m_height);
+    //CHECK_OCL_ERROR(err, "error settings parameters");
+    //
+    ////m_check_consistency_left->setArgs(d_tmp_left_disp, d_tmp_right_disp, d_src_left, m_width, m_height);
+    //clSetKernelArg(m_check_consistency_left, 0, sizeof(cl_mem), &d_tmp_left_disp);
+    //clSetKernelArg(m_check_consistency_left, 1, sizeof(cl_mem), &d_tmp_right_disp);
+    //clSetKernelArg(m_check_consistency_left, 2, sizeof(cl_mem), &d_src_left);
+    //clSetKernelArg(m_check_consistency_left, 3, sizeof(m_width), &m_width);
+    //err = clSetKernelArg(m_check_consistency_left, 4, sizeof(m_height), &m_height);
+    //CHECK_OCL_ERROR(err, "error settings parameters");
+    //
+    ////m_median_3x3->setArgs(d_left_disparity, d_tmp_left_disp, m_width, m_height);
+    //clSetKernelArg(m_median_3x3, 0, sizeof(cl_mem), &d_left_disparity);
+    //clSetKernelArg(m_median_3x3, 1, sizeof(cl_mem), &d_tmp_left_disp);
+    //clSetKernelArg(m_median_3x3, 2, sizeof(m_width), &m_width);
+    //err = clSetKernelArg(m_median_3x3, 3, sizeof(m_height), &m_height);
+    //CHECK_OCL_ERROR(err, "error settings parameters");
+    //
+    ////todo check boundary
+    ////m_copy_u8_to_u16->setArgs(d_matching_cost, d_scost);
+    //clSetKernelArg(m_copy_u8_to_u16, 0, sizeof(cl_mem), &d_matching_cost);
+    //clSetKernelArg(m_copy_u8_to_u16, 1, sizeof(cl_mem), &d_scost);
 }
 
 void StereoSGMCL::initCLCTX(int platform_idx, int device_idx)
@@ -368,28 +377,36 @@ void StereoSGMCL::finishQueue()
     CHECK_OCL_ERROR(err, "Error finishing queue");
 }
 
+
+#define WINDOW_WIDTH  9
+#define WINDOW_HEIGHT  7
+#define BLOCK_SIZE 128
+#define LINES_PER_BLOCK 16
 void StereoSGMCL::census()
 {
+    const int width_per_block = BLOCK_SIZE - WINDOW_WIDTH + 1;
+    const int height_per_block = LINES_PER_BLOCK;
+
     //setup kernels
     size_t global_size[2] = {
-        (size_t)((m_width + 16 - 1) / 16) * 16,
-        (size_t)((m_height + 16 - 1) / 16) * 16
+        (size_t)((m_width + width_per_block - 1) / width_per_block * BLOCK_SIZE),
+        (size_t)((m_height + height_per_block - 1) / height_per_block) 
     };
-    size_t local_size[2] = { 16, 16 };
-    clSetKernelArg(m_census_kernel, 0, sizeof(cl_mem), &d_src_left);
-    clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &d_left);
+    size_t local_size[2] = { BLOCK_SIZE, 1 };
+    clSetKernelArg(m_census_transform_kernel, 0, sizeof(cl_mem), &d_left_census_cost);
+    clSetKernelArg(m_census_transform_kernel, 1, sizeof(cl_mem), &d_src_left);
     cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-        m_census_kernel,
+        m_census_transform_kernel,
         2,
         nullptr,
         global_size,
         local_size,
         0, nullptr, nullptr);
     CHECK_OCL_ERROR(err, "Error enequeuing census kernel");
-    clSetKernelArg(m_census_kernel, 0, sizeof(cl_mem), &d_src_right);
-    clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &d_right);
+    clSetKernelArg(m_census_transform_kernel, 0, sizeof(cl_mem), &d_right_census_cost);
+    clSetKernelArg(m_census_transform_kernel, 1, sizeof(cl_mem), &d_src_right);
     err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-        m_census_kernel,
+        m_census_transform_kernel,
         2,
         nullptr,
         global_size,
