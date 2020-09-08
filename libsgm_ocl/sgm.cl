@@ -18,7 +18,7 @@
 // census transfrom defines
 #define WINDOW_WIDTH  9
 #define WINDOW_HEIGHT  7
-#define BLOCK_SIZE 128
+#define BLOCK_SIZE_CENSUS 128
 #define LINES_PER_BLOCK 16
 #define SMEM_BUFFER_SIZE WINDOW_HEIGHT + 1
 
@@ -43,10 +43,10 @@ kernel void census_transform_kernel(
     const int half_kw = WINDOW_WIDTH / 2;
     const int half_kh = WINDOW_HEIGHT / 2;
 
-    local pixel_type smem_lines[SMEM_BUFFER_SIZE][BLOCK_SIZE];
+    local pixel_type smem_lines[SMEM_BUFFER_SIZE][BLOCK_SIZE_CENSUS];
 
     const int tid = get_local_id(0);
-    const int x0 = get_group_id(0) * (BLOCK_SIZE - WINDOW_WIDTH + 1) - half_kw;
+    const int x0 = get_group_id(0) * (BLOCK_SIZE_CENSUS - WINDOW_WIDTH + 1) - half_kw;
     const int y0 = get_group_id(1) * LINES_PER_BLOCK;
 
     for (int i = 0; i < WINDOW_HEIGHT; ++i) {
@@ -73,7 +73,7 @@ kernel void census_transform_kernel(
             smem_lines[smem_y][smem_x] = value;
         }
 
-        if (half_kw <= tid && tid < BLOCK_SIZE - half_kw) {
+        if (half_kw <= tid && tid < BLOCK_SIZE_CENSUS - half_kw) {
             // Compute and store
             const int x = x0 + tid, y = y0 + i;
             if (half_kw <= x && x < width - half_kw && half_kh <= y && y < height - half_kh) {
@@ -86,16 +86,16 @@ kernel void census_transform_kernel(
                     for (int dx = -half_kw; dx <= half_kw; ++dx) {
                         const int smem_x1 = smem_x + dx;
                         const int smem_x2 = smem_x - dx;
-                        const auto a = smem_lines[smem_y1][smem_x1];
-                        const auto b = smem_lines[smem_y2][smem_x2];
+                        const pixel_type a = smem_lines[smem_y1][smem_x1];
+                        const pixel_type b = smem_lines[smem_y2][smem_x2];
                         f = (f << 1) | (a > b);
                     }
                 }
                 for (int dx = -half_kw; dx < 0; ++dx) {
                     const int smem_x1 = smem_x + dx;
                     const int smem_x2 = smem_x - dx;
-                    const auto a = smem_lines[smem_y][smem_x1];
-                    const auto b = smem_lines[smem_y][smem_x2];
+                    const pixel_type a = smem_lines[smem_y][smem_x1];
+                    const pixel_type b = smem_lines[smem_y][smem_x2];
                     f = (f << 1) | (a > b);
                 }
                 dest[x + y * width] = f;
@@ -104,6 +104,351 @@ kernel void census_transform_kernel(
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 }
+
+
+#define WARP_SIZE 32
+
+
+#define DP_BLOCK_SIZE_V 16
+#define BLOCK_SIZE_V WARP_SIZE * 8
+#define MAX_DISPARITY 128
+
+#define SUBGROUP_SIZE_V MAX_DISPARITY / DP_BLOCK_SIZE_V
+#define PATHS_PER_WARP_V WARP_SIZE / SUBGROUP_SIZE_V
+#define PATHS_PER_BLOCK_V BLOCK_SIZE_V / SUBGROUP_SIZE_V
+#define RIGHT_BUFFER_SIZE_V MAX_DISPARITY + PATHS_PER_BLOCK_V
+#define RIGHT_BUFFER_ROWS_V RIGHT_BUFFER_SIZE_V / DP_BLOCK_SIZE_V
+
+
+inline uint32_t pack_uint8x4(uint32_t x, uint32_t y, uint32_t z, uint32_t w) 
+{
+    uchar4 uint8x4;
+    uint8x4.x = (uint8_t)(x);
+    uint8x4.y = (uint8_t)(y);
+    uint8x4.z = (uint8_t)(z);
+    uint8x4.w = (uint8_t)(w);
+    return as_uint(uint8x4);
+}
+
+inline void store_uint8_vector_16u(global uint8_t* dest,
+    const uint32_t* ptr)
+{
+    uint4 uint32x4;
+    uint32x4.x = pack_uint8x4(ptr[0], ptr[1], ptr[2], ptr[3]);
+    uint32x4.y = pack_uint8x4(ptr[4], ptr[5], ptr[6], ptr[7]);
+    uint32x4.z = pack_uint8x4(ptr[8], ptr[9], ptr[10], ptr[11]);
+    uint32x4.w = pack_uint8x4(ptr[12], ptr[13], ptr[14], ptr[15]);
+    global uint4* dest_ptr = (global uint4*) dest;
+    *dest_ptr = uint32x4;
+}
+
+
+typedef struct
+{
+    uint32_t last_min;
+    local uint32_t * dp_shfl;
+    uint32_t dp[DP_BLOCK_SIZE_V];
+} DynamicProgramming;
+
+void init(DynamicProgramming * dp, local uint32_t * dp_local)
+{
+    dp->last_min = 0;
+    dp->dp_shfl = dp_local;
+    for (unsigned int i = 0; i < DP_BLOCK_SIZE_V; ++i) { dp->dp[i] = 0; }
+    dp->dp_shfl[0] = 0;
+    dp->dp_shfl[1] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+void update(DynamicProgramming* dp,
+    uint32_t* local_costs,
+    uint32_t p1,
+    uint32_t p2,
+    uint32_t mask,
+    local uint32_t shfl_memory[BLOCK_SIZE_V][2])
+{
+    const unsigned int lane_id = get_local_id(0) % SUBGROUP_SIZE_V;
+
+    //const uint32_t dp0 = dp->dp[0];
+    local uint32_t local_min[BLOCK_SIZE_V];
+    local_min[get_local_id(0)] = 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    uint32_t lazy_out = 0;
+    {
+        const unsigned int k = 0;
+        const int shfl_prev_idx = max(0, (int)get_local_id(0) - 1);
+        const uint32_t prev = shfl_memory[shfl_prev_idx][1];
+//#if CUDA_VERSION >= 9000
+//        const uint32_t prev =
+//            __shfl_up_sync(mask, dp[DP_BLOCK_SIZE - 1], 1);
+//#else
+//        const uint32_t prev = __shfl_up(dp[DP_BLOCK_SIZE - 1], 1);
+//#endif
+        uint32_t out = min(dp->dp[k] - dp->last_min, p2);
+        if (lane_id != 0) { out = min(out, prev - dp->last_min + p1); }
+        out = min(out, dp->dp[k + 1] - dp->last_min + p1);
+        lazy_out = local_min[get_local_id(0)] = out + local_costs[k];
+    }
+    for (unsigned int k = 1; k + 1 < DP_BLOCK_SIZE_V; ++k)
+    {
+        uint32_t out = min(dp->dp[k] - dp->last_min, p2);
+        out = min(out, dp->dp[k - 1] - dp->last_min + p1);
+        out = min(out, dp->dp[k + 1] - dp->last_min + p1);
+        dp->dp[k - 1] = lazy_out;
+        if (k == 1)
+        {
+            dp->dp_shfl[0] = lazy_out;
+        }
+        if (k == DP_BLOCK_SIZE_V - 1)
+        {
+            dp->dp_shfl[1] = lazy_out;
+        }
+        lazy_out = out + local_costs[k];
+        local_min[get_local_id(0)] = min(local_min[get_local_id(0)], lazy_out);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    {
+        const unsigned int k = DP_BLOCK_SIZE_V - 1;
+        const int shfl_next_idx = min(BLOCK_SIZE_V - 1, (int)get_local_id(0) + 1);
+        const uint32_t next = shfl_memory[shfl_next_idx][0];
+//#if CUDA_VERSION >= 9000
+//        const uint32_t next = __shfl_down_sync(mask, dp0, 1);
+//#else
+//        const uint32_t next = __shfl_down(dp0, 1);
+//#endif
+        uint32_t out = min(dp->dp[k] - dp->last_min, p2);
+        out = min(out, dp->dp[k - 1] - dp->last_min + p1);
+        if (lane_id + 1 != SUBGROUP_SIZE_V) 
+        {
+            out = min(out, next - dp->last_min + p1);
+        }
+        dp->dp[k - 1] = lazy_out;
+        dp->dp[k] = out + local_costs[k];
+        dp->dp_shfl[1] = dp->dp[k];
+        local_min[get_local_id(0)] = min(local_min[get_local_id(0)], dp->dp[k]);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    //calculating subgroup minimum
+    int lid = get_local_id(0);
+    for (int i = SUBGROUP_SIZE_V / 2; i > 0; i >>= 1)
+    {
+        if (lane_id < i)
+        {
+            local_min[lid] = min(local_min[lid], local_min[lid + i]);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    int sub_group_idx = get_local_id(0) / SUBGROUP_SIZE_V;
+    dp->last_min = local_min[sub_group_idx * SUBGROUP_SIZE_V];
+    //dp->last_min = subgroup_min<SUBGROUP_SIZE>(local_min, mask);
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+
+
+kernel void aggregate_vertical_path_kernel(
+    global uint8_t* dest,
+    global const feature_type* left,
+    global const feature_type* right,
+    int width,
+    int height,
+    unsigned int p1,
+    unsigned int p2,
+    int min_disp)
+{
+//#define DIRECTION 1
+    //static_assert(DIRECTION == 1 || DIRECTION == -1, "");
+    if (width == 0 || height == 0) {
+        return;
+    }
+
+    local feature_type right_buffer[2 * DP_BLOCK_SIZE_V][RIGHT_BUFFER_ROWS_V + 1];
+    //buffer for shuffle 
+    local feature_type shfl_buffer[BLOCK_SIZE_V][2];
+    //ocal feature_type shfl_buffer[1][1];
+
+    DynamicProgramming dp;
+    init(&dp, shfl_buffer[get_local_id(0)]);
+    const unsigned int warp_id = get_local_id(0) / WARP_SIZE;
+    const unsigned int group_id = get_local_id(0) % WARP_SIZE / SUBGROUP_SIZE_V;
+    const unsigned int lane_id = get_local_id(0) % SUBGROUP_SIZE_V;
+    const unsigned int shfl_mask = (1 << SUBGROUP_SIZE_V) - 1u;
+        //generate_mask<SUBGROUP_SIZE>() << (group_id * SUBGROUP_SIZE);
+
+    const unsigned int x =
+        get_group_id(0) * PATHS_PER_BLOCK_V +
+        warp_id * PATHS_PER_WARP_V +
+        group_id;
+    const unsigned int right_x0 = get_group_id(0) * PATHS_PER_BLOCK_V;
+    const unsigned int dp_offset = lane_id * DP_BLOCK_SIZE_V;
+
+    const unsigned int right0_addr =
+        (right_x0 + PATHS_PER_BLOCK_V - 1) - x + dp_offset;
+    const unsigned int right0_addr_lo = right0_addr % DP_BLOCK_SIZE_V;
+    const unsigned int right0_addr_hi = right0_addr / DP_BLOCK_SIZE_V;
+
+    for (unsigned int iter = 0; iter < height; ++iter)
+    {
+        const unsigned int y = iter;// (DIRECTION > 0 ? iter : height - 1 - iter);
+        // Load left to register
+        feature_type left_value;
+        if (x < width)
+        {
+            left_value = left[x + y * width];
+        }
+        // Load right to smem
+        for (unsigned int i0 = 0; i0 < RIGHT_BUFFER_SIZE_V; i0 += BLOCK_SIZE_V)
+        {
+            const unsigned int i = i0 + get_local_id(0);
+            if (i < RIGHT_BUFFER_SIZE_V)
+            {
+                const int right_x = (int)(right_x0 + PATHS_PER_BLOCK_V - 1 - i - min_disp);
+                feature_type right_value = 0;
+                if (0 <= right_x && right_x < (int)(width)) 
+                {
+                    right_value = right[right_x + y * width];
+                }
+                const unsigned int lo = i % DP_BLOCK_SIZE_V;
+                const unsigned int hi = i / DP_BLOCK_SIZE_V;
+                right_buffer[lo][hi] = right_value;
+                if (hi > 0)
+                {
+                    right_buffer[lo + DP_BLOCK_SIZE_V][hi - 1] = right_value;
+                }
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        // Compute
+        if (x < width)
+        {
+            feature_type right_values[DP_BLOCK_SIZE_V];
+            for (unsigned int j = 0; j < DP_BLOCK_SIZE_V; ++j)
+            {
+                right_values[j] = right_buffer[right0_addr_lo + j][right0_addr_hi];
+            }
+            uint32_t local_costs[DP_BLOCK_SIZE_V];
+            for (unsigned int j = 0; j < DP_BLOCK_SIZE_V; ++j)
+            {
+                local_costs[j] = popcount(left_value ^ right_values[j]);
+            }
+            update(&dp, local_costs, p1, p2, shfl_mask, shfl_buffer);
+            store_uint8_vector_16u(
+                &dest[dp_offset + x * MAX_DISPARITY + y * MAX_DISPARITY * width],
+                dp.dp);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+}
+
+
+kernel void aggregate_vertical_path_kernel_down2up(
+    global uint8_t* dest,
+    global const feature_type* left,
+    global const feature_type* right,
+    int width,
+    int height,
+    unsigned int p1,
+    unsigned int p2,
+    int min_disp)
+{
+    //static_assert(DIRECTION == 1 || DIRECTION == -1, "");
+    if (width == 0 || height == 0) {
+        return;
+    }
+
+    local feature_type right_buffer[2 * DP_BLOCK_SIZE_V][RIGHT_BUFFER_ROWS_V + 1];
+    //buffer for shuffle 
+    local feature_type shfl_buffer[BLOCK_SIZE_V][2];
+    //ocal feature_type shfl_buffer[1][1];
+
+    DynamicProgramming dp;
+    init(&dp, shfl_buffer[get_local_id(0)]);
+    const unsigned int warp_id = get_local_id(0) / WARP_SIZE;
+    const unsigned int group_id = get_local_id(0) % WARP_SIZE / SUBGROUP_SIZE_V;
+    const unsigned int lane_id = get_local_id(0) % SUBGROUP_SIZE_V;
+    const unsigned int shfl_mask = (1 << SUBGROUP_SIZE_V) - 1u;
+    //generate_mask<SUBGROUP_SIZE>() << (group_id * SUBGROUP_SIZE);
+
+    const unsigned int x =
+        get_group_id(0) * PATHS_PER_BLOCK_V +
+        warp_id * PATHS_PER_WARP_V +
+        group_id;
+    const unsigned int right_x0 = get_group_id(0) * PATHS_PER_BLOCK_V;
+    const unsigned int dp_offset = lane_id * DP_BLOCK_SIZE_V;
+
+    const unsigned int right0_addr =
+        (right_x0 + PATHS_PER_BLOCK_V - 1) - x + dp_offset;
+    const unsigned int right0_addr_lo = right0_addr % DP_BLOCK_SIZE_V;
+    const unsigned int right0_addr_hi = right0_addr / DP_BLOCK_SIZE_V;
+
+    for (unsigned int iter = 0; iter < height; ++iter)
+    {
+        const unsigned int y = height - 1 - iter;//(DIRECTION > 0 ? iter : height - 1 - iter);
+        // Load left to register
+        feature_type left_value;
+        if (x < width)
+        {
+            left_value = left[x + y * width];
+        }
+        // Load right to smem
+        for (unsigned int i0 = 0; i0 < RIGHT_BUFFER_SIZE_V; i0 += BLOCK_SIZE_V)
+        {
+            const unsigned int i = i0 + get_local_id(0);
+            if (i < RIGHT_BUFFER_SIZE_V)
+            {
+                const int right_x = (int)(right_x0 + PATHS_PER_BLOCK_V - 1 - i - min_disp);
+                feature_type right_value = 0;
+                if (0 <= right_x && right_x < (int)(width))
+                {
+                    right_value = right[right_x + y * width];
+                }
+                const unsigned int lo = i % DP_BLOCK_SIZE_V;
+                const unsigned int hi = i / DP_BLOCK_SIZE_V;
+                right_buffer[lo][hi] = right_value;
+                if (hi > 0)
+                {
+                    right_buffer[lo + DP_BLOCK_SIZE_V][hi - 1] = right_value;
+                }
+            }
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+        // Compute
+        if (x < width)
+        {
+            feature_type right_values[DP_BLOCK_SIZE_V];
+            for (unsigned int j = 0; j < DP_BLOCK_SIZE_V; ++j)
+            {
+                right_values[j] = right_buffer[right0_addr_lo + j][right0_addr_hi];
+            }
+            uint32_t local_costs[DP_BLOCK_SIZE_V];
+            for (unsigned int j = 0; j < DP_BLOCK_SIZE_V; ++j)
+            {
+                local_costs[j] = popcount(left_value ^ right_values[j]);
+            }
+            update(&dp, local_costs, p1, p2, shfl_mask, shfl_buffer);
+            store_uint8_vector_16u(
+                &dest[dp_offset + x * MAX_DISPARITY + y * MAX_DISPARITY * width],
+                dp.dp);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+}
+
+
+
+
+
+#define DP_BLOCK_SIZE_H 8;
+#define DP_BLOCKS_PER_THREAD_H 1;
+#define WARPS_PER_BLOCK_H 4;
+#define BLOCK_SIZE_H WARP_SIZE * WARPS_PER_BLOCK_H;
+
+
+
+
+
+
 
 
 //#define MCOST_LINES128 2
@@ -846,8 +1191,8 @@ kernel void census_transform_kernel(
 //    output[x] = input[x];
 //}
 //
-//kernel void clear_buffer(global float8* buff)
-//{
-//    int x = get_global_id(0);
-//    buff[x] = (float8)0;
-//}
+kernel void clear_buffer(global float8* buff)
+{
+    int x = get_global_id(0);
+    buff[x] = (float8)0;
+}

@@ -45,9 +45,7 @@ StereoSGMCL::~StereoSGMCL()
     //delete d_right;
     clReleaseMemObject(d_right_census_cost);
     //delete d_matching_cost;
-    clReleaseMemObject(d_matching_cost);
-    //delete d_scost;
-    clReleaseMemObject(d_scost);
+    clReleaseMemObject(d_cost_buffer);
     //delete d_left_disparity;
     clReleaseMemObject(d_left_disparity);
     //delete d_right_disparity;
@@ -91,7 +89,6 @@ void StereoSGMCL::execute(void* left_data, void* right_data, void* output_buffer
 
     mem_init();
     //m_context->finish(0);
-    matching_cost();
     //m_context->finish(0);
 
 
@@ -100,7 +97,9 @@ void StereoSGMCL::execute(void* left_data, void* right_data, void* output_buffer
     //	128);
     //m_context->finish(0);
 
-    scan_cost();
+    path_aggregation();
+    finishQueue();
+
 
     winner_takes_all();
     //m_context->finish(0);
@@ -167,15 +166,15 @@ void StereoSGMCL::initCL()
 
 
     m_census_transform_kernel = clCreateKernel(sgm_program, "census_transform_kernel", &err);
-    CHECK_OCL_ERROR(err, "Create census_kernel")
-    //m_matching_cost_kernel_128 = clCreateKernel(sgm_program, "matching_cost_kernel_128", & err);
-    //CHECK_OCL_ERROR(err, "Create matching_cost_kernel_128")
-    //
-    //m_compute_stereo_horizontal_dir_kernel_0 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_0", &err);
-    //CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_0");
+    CHECK_OCL_ERROR(err, "Create census_kernel");
+    //path aggregation kernels
+    m_aggregate_vertical_path_kernel_dir_1 = clCreateKernel(sgm_program, "aggregate_vertical_path_kernel", &err);
+    CHECK_OCL_ERROR(err, "Create aggregate_vertical_path_kernel");
+    m_aggregate_vertical_path_kernel_dir__1 = clCreateKernel(sgm_program, "aggregate_vertical_path_kernel_down2up", &err);
+    CHECK_OCL_ERROR(err, "Create aggregate_vertical_path_kernel_down2up");
     //m_compute_stereo_horizontal_dir_kernel_4 = clCreateKernel(sgm_program, "compute_stereo_horizontal_dir_kernel_4", &err);
     //CHECK_OCL_ERROR(err, "Create compute_stereo_horizontal_dir_kernel_4");
-    //
+    
     //m_compute_stereo_vertical_dir_kernel_2 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_2", &err);
     //CHECK_OCL_ERROR(err, "Create compute_stereo_vertical_dir_kernel_2");
     //m_compute_stereo_vertical_dir_kernel_6 =  clCreateKernel(sgm_program, "compute_stereo_vertical_dir_kernel_6", &err);
@@ -203,8 +202,8 @@ void StereoSGMCL::initCL()
     //m_copy_u8_to_u16 = clCreateKernel(sgm_program, "copy_u8_to_u16", &err);
     //CHECK_OCL_ERROR(err, "Create copy_u8_to_u16");
     //
-    //m_clear_buffer = clCreateKernel(sgm_program, "clear_buffer", &err);
-    //CHECK_OCL_ERROR(err, "Create clear_buffer");
+    m_clear_buffer = clCreateKernel(sgm_program, "clear_buffer", &err);
+    CHECK_OCL_ERROR(err, "Create clear_buffer");
 
     d_src_left = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, m_width * m_height, nullptr, &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
@@ -227,11 +226,21 @@ void StereoSGMCL::initCL()
         &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
 
-    d_matching_cost = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, m_width * m_height * m_max_disparity, nullptr, &err);
+    const unsigned int num_paths = 4;// path_type == PathType::SCAN_4PATH ? 4 : 8;
+    const size_t buffer_size = m_width * m_height * m_max_disparity * num_paths;
+    const size_t buffer_step = m_width * m_height * m_max_disparity;
+    // cost type is uint8_t
+    d_cost_buffer = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, buffer_size, nullptr, &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
 
-    d_scost = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(uint16_t) * m_width * m_height * m_max_disparity, nullptr, &err);
-    CHECK_OCL_ERROR(err, "Create clear_buffer");
+    for (int i = 0; i < 8; ++i)
+    {
+        cl_buffer_region region = { buffer_step * i, buffer_step };
+        d_sub_buffers[i] = clCreateSubBuffer(d_cost_buffer,
+            CL_MEM_READ_WRITE,
+            CL_BUFFER_CREATE_TYPE_REGION,
+           &region, &err);
+    }
 
     d_left_disparity = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(uint16_t) * m_width * m_height, nullptr, &err);
     CHECK_OCL_ERROR(err, "Create clear_buffer");
@@ -253,6 +262,29 @@ void StereoSGMCL::initCL()
     err = clSetKernelArg(m_census_transform_kernel, 3, sizeof(m_height), &m_height);
     err = clSetKernelArg(m_census_transform_kernel, 4, sizeof(m_width), &m_width);
     CHECK_OCL_ERROR(err, "error settings parameters");
+
+    //
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 0, sizeof(cl_mem), &d_sub_buffers[0]);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 1, sizeof(cl_mem), &d_left_census_cost);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 2, sizeof(cl_mem), &d_right_census_cost);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 3, sizeof(m_width), &m_width);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 4, sizeof(m_height), &m_height);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 5, sizeof(m_p1), &m_p1);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 6, sizeof(m_p2), &m_p2);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir_1, 7, sizeof(m_min_disp), &m_min_disp);
+    CHECK_OCL_ERROR(err, "error settings parameters");
+
+    //
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 0, sizeof(cl_mem), &d_sub_buffers[1]);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 1, sizeof(cl_mem), &d_left_census_cost);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 2, sizeof(cl_mem), &d_right_census_cost);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 3, sizeof(m_width), &m_width);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 4, sizeof(m_height), &m_height);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 5, sizeof(m_p1), &m_p1);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 6, sizeof(m_p2), &m_p2);
+    err = clSetKernelArg(m_aggregate_vertical_path_kernel_dir__1, 7, sizeof(m_min_disp), &m_min_disp);
+    CHECK_OCL_ERROR(err, "error settings parameters");
+
 
 
     ////m_matching_cost_kernel_128->setArgs(d_left, d_right, d_matching_cost, m_width, m_height);
@@ -444,150 +476,61 @@ void StereoSGMCL::mem_init()
             &local_size,
             0, nullptr, nullptr);
     }
-    {
-        clSetKernelArg(m_clear_buffer, 0, sizeof(cl_mem), &d_scost);
-        size_t global_size = (m_width * m_height * sizeof(uint16_t) * m_max_disparity / 32 / 256) * 256;
-        size_t local_size = 256;
-        cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_clear_buffer,
-            1,
-            nullptr,
-            &global_size,
-            &local_size,
-            0, nullptr, nullptr);
-
-    }
+    //{
+    //    clSetKernelArg(m_clear_buffer, 0, sizeof(cl_mem), &d_scost);
+    //    size_t global_size = (m_width * m_height * sizeof(uint16_t) * m_max_disparity / 32 / 256) * 256;
+    //    size_t local_size = 256;
+    //    cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
+    //        m_clear_buffer,
+    //        1,
+    //        nullptr,
+    //        &global_size,
+    //        &local_size,
+    //        0, nullptr, nullptr);
+    //
+    //}
 }
 
-void StereoSGMCL::matching_cost()
+void StereoSGMCL::path_aggregation()
 {
-    size_t MCOST_LINES128 = 2;
-    //(*m_matching_cost_kernel_128)(0,
-    //    napalm::ImgRegion(m_height / MCOST_LINES128, 1),
-    //    napalm::ImgRegion(128, MCOST_LINES128));
 
-    size_t global_size[2] = {
-        (size_t)(m_height / MCOST_LINES128) * 128,
-        (size_t)(1) * MCOST_LINES128
-    };
-    size_t local_size[2] = { 128, MCOST_LINES128 };
+    static constexpr unsigned int WARP_SIZE = 32u;
+    static constexpr unsigned int DP_BLOCK_SIZE = 16u;
+    static constexpr unsigned int BLOCK_SIZE_PA = WARP_SIZE * 8u;
+
+    static const unsigned int SUBGROUP_SIZE = m_max_disparity / DP_BLOCK_SIZE;
+    static const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE_PA / SUBGROUP_SIZE;
+
+    //vertical directions
+    //up down dir
+    const size_t gdim = (m_width + PATHS_PER_BLOCK - 1) / PATHS_PER_BLOCK;
+    const size_t bdim = BLOCK_SIZE_PA;
+
+    size_t global_size[1] = {gdim * bdim};
+    size_t local_size[1] = { bdim};
+
+
     cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-        m_matching_cost_kernel_128,
-        2,
+        m_aggregate_vertical_path_kernel_dir_1,
+        1,
         nullptr,
         global_size,
         local_size,
         0, nullptr, nullptr);
-}
+    CHECK_OCL_ERROR(err, "Error finishing queue");
+    finishQueue();
+    err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
+        m_aggregate_vertical_path_kernel_dir__1,
+        1,
+        nullptr,
+        global_size,
+        local_size,
+        0, nullptr, nullptr);
+    CHECK_OCL_ERROR(err, "Error finishing queue");
+    finishQueue();
 
-void StereoSGMCL::scan_cost()
-{
-    //census_event.wait();
-    static const size_t PATHS_IN_BLOCK = 8;
-    size_t local_size[2] = { 32, PATHS_IN_BLOCK };
 
-    {
-        //(*m_compute_stereo_horizontal_dir_kernel_0)(0,
-        //    napalm::ImgRegion(m_height / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        size_t global_size[2] = {
-            (m_height / PATHS_IN_BLOCK) * 32,
-            (1 ) * PATHS_IN_BLOCK
-        };
-        cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_horizontal_dir_kernel_0,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        //(*m_compute_stereo_horizontal_dir_kernel_4)(0,
-        //    napalm::ImgRegion(m_height / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_horizontal_dir_kernel_4,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-    }
-    {
-        size_t global_size[2] = {
-            (m_width / PATHS_IN_BLOCK) * 32,
-            (1) * PATHS_IN_BLOCK
-        };
-        //(*m_compute_stereo_vertical_dir_kernel_2)(0,
-        //    napalm::ImgRegion(m_width / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_vertical_dir_kernel_2,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        //(*m_compute_stereo_vertical_dir_kernel_6)(0,
-        //    napalm::ImgRegion(m_width / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_vertical_dir_kernel_6,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-    }
-    {
-        const int obl_num_paths = m_width + m_height;
-        size_t global_size[2] = {
-            (obl_num_paths / PATHS_IN_BLOCK) * 32,
-            (1) * PATHS_IN_BLOCK
-        };
-
-        //(*m_compute_stereo_oblique_dir_kernel_1)(0,
-        //    napalm::ImgRegion(obl_num_paths / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        cl_int err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_oblique_dir_kernel_1,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        //(*m_compute_stereo_oblique_dir_kernel_3)(0,
-        //    napalm::ImgRegion(obl_num_paths / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_oblique_dir_kernel_3,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-
-        //(*m_compute_stereo_oblique_dir_kernel_5)(0,
-        //    napalm::ImgRegion(obl_num_paths / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_oblique_dir_kernel_5,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-
-        //(*m_compute_stereo_oblique_dir_kernel_7)(0,
-        //    napalm::ImgRegion(obl_num_paths / PATHS_IN_BLOCK, 1),
-        //    napalm::ImgRegion(32, PATHS_IN_BLOCK));
-        err = clEnqueueNDRangeKernel(m_cl_cmd_queue,
-            m_compute_stereo_oblique_dir_kernel_7,
-            2,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-    }
+    int alma = 0;
 }
 
 void StereoSGMCL::winner_takes_all()
