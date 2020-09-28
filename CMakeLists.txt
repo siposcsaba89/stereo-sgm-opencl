@@ -9,10 +9,44 @@ option(BUILD_EXAMPLES "Build sgm ocl example" ON)
 
 find_package(OpenCL REQUIRED)
 
-add_library(libsgm_ocl src/libsgm_ocl.cpp libsgm_ocl/libsgm_ocl.h libsgm_ocl/sgm.cl)
-add_library(::libsgm_ocl ALIAS libsgm_ocl)
+include(CMakeRC.cmake)
 
-set(PROGRAMS libsgm_ocl/sgm.cl)
+set(OCL_FILES
+    src/ocl/census.cl
+    src/ocl/common.cl
+    src/ocl/path_aggregation_vertical.cl
+)
+
+cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})
+
+set(LIBSGM_SRCS
+    src/census.h
+    src/path_aggregation.h
+    src/path_aggregation_vertical.h
+    src/census.cpp
+    src/libsgm_ocl.cpp
+    src/path_aggregation.cpp
+    src/path_aggregation_vertical.cpp
+    src/sgm.hpp
+    src/device_buffer.hpp
+)
+
+set(LIBSGM_PUBLIC_HDRS
+    libsgm_ocl/libsgm_ocl.h
+)
+
+add_library(libsgm_ocl ${LIBSGM_SRCS} ${LIBSGM_PUBLIC_HDRS} ${OCL_FILES})
+add_library(::libsgm_ocl ALIAS libsgm_ocl)
+source_group(ocl FILES ${OCL_FILES})
+source_group(libsgm_ocl FILES ${LIBSGM_PUBLIC_HDRS})
+
+# hack cmake bug, workaround found at https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_333595
+# cannot link object library, because it requires that library to be exported
+#ugly workaround
+#   get_target_property(TMP cmrc-base INTERFACE_INCLUDE_DIRECTORIES)
+#   target_include_directories(libsgm_ocl PRIVATE "${TMP}")
+#little bit nicer
+target_link_libraries(libsgm_ocl PRIVATE $<BUILD_INTERFACE:rc_ocl_sgm>)
 
 set_target_properties(libsgm_ocl PROPERTIES DEBUG_POSTFIX _d RELWITHDEBINFO_POSTFIX _rd)
 target_include_directories(libsgm_ocl
@@ -40,10 +74,7 @@ install(FILES
     
 install(EXPORT ${PROJECT_NAME}-targets NAMESPACE :: DESTINATION lib/cmake/${PROJECT_NAME})
 
-install(FILES
-   libsgm_ocl/libsgm_ocl.h 
-   libsgm_ocl/sgm.cl
-   DESTINATION include/libsgm_ocl/libsgm_ocl)
+install(FILES ${LIBSGM_PUBLIC_HDRS} DESTINATION include/libsgm_ocl/libsgm_ocl)
 
 
 if (BUILD_EXAMPLES)

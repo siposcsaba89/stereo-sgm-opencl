@@ -3,38 +3,135 @@
 #include <assert.h>
 #include <fstream>
 #include <iostream>
+#include "sgm.hpp"
+#include "device_buffer.hpp"
+//#include <cmrc/cmrc.hpp>
+//CMRC_DECLARE(ocl_sgm);
 
-void context_error_callback(const char* errinfo, const void* private_info, size_t cb, void* user_data)
+//resource reading
+//auto       fs = cmrc::ocl_sgm::get_filesystem();
+//auto       flower_rc = fs.open("libsgm_ocl/sgm.cl");
+//const auto rc_size = std::distance(flower_rc.begin(), flower_rc.end());
+//auto kernel = std::string(flower_rc.begin(), flower_rc.end());
+//std::cout << kernel << std::endl;
+//std::cout << rc_size << std::endl;
+
+namespace sgm
 {
-    std::cout << "opencl error : " << errinfo << std::endl;
-}
+namespace cl
+{
 
-StereoSGMCL::StereoSGMCL(int width,
+static bool is_device_input(EXECUTE_INOUT type) { return (type & 0x1) > 0; }
+static bool is_device_output(EXECUTE_INOUT type) { return (type & 0x2) > 0; }
+
+
+class SemiGlobalMatchingBase 
+{
+public:
+    using output_type = output_type;
+    virtual void execute(output_type* dst_L,
+        output_type* dst_R,
+        const void* src_L,
+        const void* src_R,
+        int w, int h, int sp, int dp,
+        Parameters& param) = 0;
+
+    virtual ~SemiGlobalMatchingBase() {}
+};
+
+template <typename input_type, int DISP_SIZE>
+class SemiGlobalMatchingImpl : public SemiGlobalMatchingBase 
+{
+public:
+    void execute(output_type* dst_L, output_type* dst_R, const void* src_L, const void* src_R,
+        int w, int h, int sp, int dp, Parameters& param) override
+    {
+        sgm_engine_.execute(dst_L, dst_R, (const input_type*)src_L, (const input_type*)src_R, w, h, sp, dp, param);
+    }
+private:
+    SemiGlobalMatching<input_type, DISP_SIZE> sgm_engine_;
+};
+
+
+struct CudaStereoSGMResources
+{
+    DeviceBuffer<uint8_t> d_src_left;
+    DeviceBuffer<uint8_t> d_src_right;
+    DeviceBuffer<uint16_t> d_left_disp;
+    DeviceBuffer<uint16_t> d_right_disp;
+    DeviceBuffer<uint16_t> d_tmp_left_disp;
+    DeviceBuffer<uint16_t> d_tmp_right_disp;
+
+    std::unique_ptr<SemiGlobalMatchingBase> sgm_engine;
+
+    CudaStereoSGMResources(int width_,
+        int height_,
+        int disparity_size_,
+        int input_depth_bits_,
+        int output_depth_bits_,
+        int src_pitch_,
+        int dst_pitch_,
+        EXECUTE_INOUT inout_type_) 
+    {
+
+        if (input_depth_bits_ == 8 && disparity_size_ == 64)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 64>>();
+        else if (input_depth_bits_ == 8 && disparity_size_ == 128)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 128>>();
+        else if (input_depth_bits_ == 8 && disparity_size_ == 256)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 256>>();
+        else if (input_depth_bits_ == 16 && disparity_size_ == 64)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 64>>();
+        else if (input_depth_bits_ == 16 && disparity_size_ == 128)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 128>>();
+        else if (input_depth_bits_ == 16 && disparity_size_ == 256)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 256>>();
+        else
+            throw std::logic_error("depth bits must be 8 or 16, and disparity size must be 64 or 128");
+
+        if (!is_device_input(inout_type_)) {
+            this->d_src_left.allocate(input_depth_bits_ / 8 * src_pitch_ * height_);
+            this->d_src_right.allocate(input_depth_bits_ / 8 * src_pitch_ * height_);
+        }
+
+        this->d_left_disp.allocate(dst_pitch_ * height_);
+        this->d_right_disp.allocate(dst_pitch_ * height_);
+
+        this->d_tmp_left_disp.allocate(dst_pitch_ * height_);
+        this->d_tmp_right_disp.allocate(dst_pitch_ * height_);
+
+        this->d_left_disp.fillZero();
+        this->d_right_disp.fillZero();
+        this->d_tmp_left_disp.fillZero();
+        this->d_tmp_right_disp.fillZero();
+    }
+
+    ~CudaStereoSGMResources()
+    {
+        sgm_engine.reset();
+    }
+};
+
+StereoSGM::StereoSGM(int width,
     int height,
-    int max_disp_size,
-    int platform_idx,
-    int device_idx)
+    int disparity_size,
+    int input_depth_bits,
+    int output_depth_bits,
+    EXECUTE_INOUT inout_type,
+    cl_context ctx,
+    const Parameters& param)
     :
     m_width(width),
     m_height(height),
-    m_max_disparity(max_disp_size)
-{
-    initCLCTX(platform_idx, device_idx);
-    initCL();
-}
-
-StereoSGMCL::StereoSGMCL(int width, int height, int max_disp_size, cl_context ctx)
-    :
-    m_width(width),
-    m_height(height),
-    m_max_disparity(max_disp_size),
-    m_cl_ctx(ctx)
+    m_max_disparity(disparity_size)
 {
     initCL();
 }
 
+}
+}
 
-StereoSGMCL::~StereoSGMCL()
+StereoSGM::~StereoSGM()
 {
     //delete d_src_left;
     clReleaseMemObject(d_src_left);
@@ -56,14 +153,14 @@ StereoSGMCL::~StereoSGMCL()
     clReleaseMemObject(d_tmp_right_disp);
 }
 
-bool StereoSGMCL::init(int platform_idx, int device_idx)
+bool StereoSGM::init(int platform_idx, int device_idx)
 {
     initCLCTX(platform_idx, device_idx);
     initCL();
     return true;
 }
 
-void StereoSGMCL::execute(void* left_data, void* right_data, void* output_buffer)
+void StereoSGM::execute(void* left_data, void* right_data, void* output_buffer)
 {
     cl_int err;
 
@@ -123,13 +220,7 @@ void StereoSGMCL::execute(void* left_data, void* right_data, void* output_buffer
 
 }
 
-#define CHECK_OCL_ERROR(err, msg) \
-    if (err != CL_SUCCESS) \
-    { \
-        std::cout << "OCL_ERROR at line " << __LINE__ << ". Message: " << msg << std::endl; \
-    }\
-
-void StereoSGMCL::initCL()
+void StereoSGM::initCL()
 {
     cl_int err;
     m_cl_cmd_queue = clCreateCommandQueue(m_cl_ctx, m_cl_device, 0, &err);
@@ -360,50 +451,8 @@ void StereoSGMCL::initCL()
     //clSetKernelArg(m_copy_u8_to_u16, 1, sizeof(cl_mem), &d_scost);
 }
 
-void StereoSGMCL::initCLCTX(int platform_idx, int device_idx)
-{
-    cl_uint num_platform;
-    clGetPlatformIDs(0, nullptr, &num_platform);
-    assert((size_t)platform_idx < num_platform);
-    std::vector<cl_platform_id> platform_ids(num_platform);
-    clGetPlatformIDs(num_platform, platform_ids.data(), nullptr);
-    cl_uint num_devices;
-    clGetDeviceIDs(platform_ids[platform_idx], CL_DEVICE_TYPE_GPU, 0, nullptr, &num_devices);
-    assert((size_t)device_idx < num_devices);
-    std::vector<cl_device_id> cl_devices(num_devices);
-    clGetDeviceIDs(platform_ids[platform_idx], CL_DEVICE_TYPE_GPU, num_devices, cl_devices.data(), nullptr);
-    m_cl_device = cl_devices[device_idx];
-    cl_int err;
-    m_cl_ctx = clCreateContext(nullptr, 1, &cl_devices[device_idx], context_error_callback, NULL, &err);
 
-    if (err != CL_SUCCESS)
-    {
-        std::cout << "Error creating context " << err << std::endl;
-        throw std::runtime_error("Error creating context!");
-    }
-    {
-        size_t name_size_in_bytes;
-        clGetPlatformInfo(platform_ids[platform_idx], CL_PLATFORM_NAME, 0, nullptr, &name_size_in_bytes);
-        std::string platform_name;
-        platform_name.resize(name_size_in_bytes);
-        clGetPlatformInfo(platform_ids[platform_idx], CL_PLATFORM_NAME,
-            platform_name.size(),
-            (void*)platform_name.data(), nullptr);
-        std::cout << "Platform name: " << platform_name << std::endl;
-    }
-    {
-        size_t name_size_in_bytes;
-        clGetDeviceInfo(cl_devices[device_idx], CL_DEVICE_NAME, 0, nullptr, &name_size_in_bytes);
-        std::string dev_name;
-        dev_name.resize(name_size_in_bytes);
-        clGetDeviceInfo(cl_devices[device_idx], CL_DEVICE_NAME,
-            dev_name.size(),
-            (void*)dev_name.data(), nullptr);
-        std::cout << "Device name: " << dev_name << std::endl;
-    }
-}
-
-void StereoSGMCL::finishQueue()
+void StereoSGM::finishQueue()
 {
     cl_int err = clFinish(m_cl_cmd_queue);
     CHECK_OCL_ERROR(err, "Error finishing queue");
@@ -414,7 +463,7 @@ void StereoSGMCL::finishQueue()
 #define WINDOW_HEIGHT  7
 #define BLOCK_SIZE 128
 #define LINES_PER_BLOCK 16
-void StereoSGMCL::census()
+void StereoSGM::census()
 {
     const int width_per_block = BLOCK_SIZE - WINDOW_WIDTH + 1;
     const int height_per_block = LINES_PER_BLOCK;
@@ -449,7 +498,7 @@ void StereoSGMCL::census()
     finishQueue();
 }
 
-void StereoSGMCL::mem_init()
+void StereoSGM::mem_init()
 {
     {
         clSetKernelArg(m_clear_buffer, 0, sizeof(cl_mem), &d_left_disparity);
@@ -491,7 +540,7 @@ void StereoSGMCL::mem_init()
     //}
 }
 
-void StereoSGMCL::path_aggregation()
+void StereoSGM::path_aggregation()
 {
 
     static constexpr unsigned int WARP_SIZE = 32u;
@@ -533,7 +582,7 @@ void StereoSGMCL::path_aggregation()
     int alma = 0;
 }
 
-void StereoSGMCL::winner_takes_all()
+void StereoSGM::winner_takes_all()
 {
     const size_t WTA_PIXEL_IN_BLOCK = 8;
     //(*m_winner_takes_all_kernel128)(0,
@@ -554,7 +603,7 @@ void StereoSGMCL::winner_takes_all()
         0, nullptr, nullptr);
 }
 
-void StereoSGMCL::median()
+void StereoSGM::median()
 {
     size_t global_size[2] = {
         (size_t)((m_width + 16 - 1) / 16) * 16,
@@ -594,7 +643,7 @@ void StereoSGMCL::median()
 
 }
 
-void StereoSGMCL::check_consistency_left()
+void StereoSGM::check_consistency_left()
 {
     //(*m_check_consistency_left)(0,
     //    napalm::ImgRegion((m_width + 16 - 1) / 16, (m_height + 16 - 1) / 16),

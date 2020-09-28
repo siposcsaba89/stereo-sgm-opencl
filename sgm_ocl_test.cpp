@@ -40,6 +40,59 @@ static void saveXYZ(const char* filename, const cv::Mat& mat)
 
 #include <iomanip>
 #include <sstream>
+
+
+void context_error_callback(const char* errinfo, const void* private_info, size_t cb, void* user_data)
+{
+    std::cout << "opencl error : " << errinfo << std::endl;
+}
+
+cl_context initCLCTX(int platform_idx, int device_idx)
+{
+    cl_uint num_platform;
+    clGetPlatformIDs(0, nullptr, &num_platform);
+    assert((size_t)platform_idx < num_platform);
+    std::vector<cl_platform_id> platform_ids(num_platform);
+    clGetPlatformIDs(num_platform, platform_ids.data(), nullptr);
+    cl_uint num_devices;
+    clGetDeviceIDs(platform_ids[platform_idx], CL_DEVICE_TYPE_GPU, 0, nullptr, &num_devices);
+    assert((size_t)device_idx < num_devices);
+    std::vector<cl_device_id> cl_devices(num_devices);
+    clGetDeviceIDs(platform_ids[platform_idx], CL_DEVICE_TYPE_GPU, num_devices, cl_devices.data(), nullptr);
+    cl_device_id cl_device = cl_devices[device_idx];
+    cl_int err;
+    cl_context cl_ctx = clCreateContext(nullptr, 1, &cl_devices[device_idx], context_error_callback, NULL, &err);
+
+    if (err != CL_SUCCESS)
+    {
+        std::cout << "Error creating context " << err << std::endl;
+        throw std::runtime_error("Error creating context!");
+    }
+    {
+        size_t name_size_in_bytes;
+        clGetPlatformInfo(platform_ids[platform_idx], CL_PLATFORM_NAME, 0, nullptr, &name_size_in_bytes);
+        std::string platform_name;
+        platform_name.resize(name_size_in_bytes);
+        clGetPlatformInfo(platform_ids[platform_idx], CL_PLATFORM_NAME,
+            platform_name.size(),
+            (void*)platform_name.data(), nullptr);
+        std::cout << "Platform name: " << platform_name << std::endl;
+    }
+    {
+        size_t name_size_in_bytes;
+        clGetDeviceInfo(cl_devices[device_idx], CL_DEVICE_NAME, 0, nullptr, &name_size_in_bytes);
+        std::string dev_name;
+        dev_name.resize(name_size_in_bytes);
+        clGetDeviceInfo(cl_devices[device_idx], CL_DEVICE_NAME,
+            dev_name.size(),
+            (void*)dev_name.data(), nullptr);
+        std::cout << "Device name: " << dev_name << std::endl;
+    }
+    return cl_ctx;
+}
+
+
+
 int main(int argc, char* argv[]) {
 
     // imgleft%2509d.pgm imgright%2509d.pgm
@@ -157,7 +210,24 @@ int main(int argc, char* argv[]) {
     float cy = (float)M1.at<double>(5);
     float b_d = (float)cv::norm(T, cv::NORM_L2);
 
-    StereoSGMCL ssgm(width, height, disp_size, 1, 0);// , bits, 16, fl, cx, cy, b_d);
+
+    cl_context cl_ctx = initCLCTX(1, 0);
+
+    int input_depth = 8;
+    int output_depth = 8;
+    sgm::cl::Parameters params;
+    params.path_type = sgm::cl::PathType::SCAN_8PATH;
+    params.subpixel = false;
+    params.uniqueness = 0.95f;
+
+    sgm::cl::StereoSGM ssgm(width,
+        height,
+        disp_size,
+        input_depth,
+        output_depth,
+        sgm::cl::EXECUTE_INOUT_DEVICE2DEVICE,
+        cl_ctx,
+        params);// , bits, 16, fl, cx, cy, b_d);
 
     uint16_t* d_output_buffer = nullptr;
 
