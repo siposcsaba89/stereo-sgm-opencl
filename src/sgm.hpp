@@ -18,17 +18,17 @@ limitations under the License.
 #include <memory>
 #include <cstdint>
 #include "libsgm_ocl/libsgm_ocl.h"
+#include "types.hpp"
 
 namespace sgm
 {
 namespace cl
 {
 
-template <typename T, size_t MAX_DISPARITY>
+template <typename input_type, size_t MAX_DISPARITY>
 class SemiGlobalMatching
 {
 public:
-    using input_type = T;
     using output_type = sgm::output_type;
 
 private:
@@ -48,7 +48,7 @@ public:
         int height,
         int src_pitch,
         int dst_pitch,
-        const StereoSGM::Parameters& param);
+        const Parameters& param);
 
     void enqueue(
         output_type* dest_left,
@@ -59,7 +59,7 @@ public:
         int height,
         int src_pitch,
         int dst_pitch,
-        const StereoSGM::Parameters& param,
+        const Parameters& param,
         cl_command_queue stream);
 };
 

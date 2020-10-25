@@ -32,17 +32,9 @@ namespace sgm
 namespace cl
 {
 
-template <typename T>
-class DeviceBuffer {
-
-public:
-    using value_type = T;
-
-private:
-    cl_context m_cl_ctx;
-    cl_mem m_data;
-    size_t m_size;
-
+template <typename value_type>
+class DeviceBuffer
+{
 public:
     DeviceBuffer()
         : m_data(nullptr)
@@ -117,16 +109,21 @@ public:
         return m_size;
     }
 
-    const cl_mem data() const
+    cl_mem & data()
     {
         return m_data;
     }
 
-    cl_mem data()
+    const cl_mem& data() const
     {
         return m_data;
     }
+private:
+    cl_context m_cl_ctx;
+    cl_mem m_data;
+    size_t m_size;
 };
 
 }
 }
+

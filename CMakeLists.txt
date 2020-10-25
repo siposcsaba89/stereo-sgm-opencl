@@ -20,7 +20,7 @@ set(OCL_FILES
 cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})
 
 set(LIBSGM_SRCS
-    src/census.h
+    src/census_transform.hpp
     src/path_aggregation.h
     src/path_aggregation_vertical.h
     src/census.cpp
@@ -29,6 +29,7 @@ set(LIBSGM_SRCS
     src/path_aggregation_vertical.cpp
     src/sgm.hpp
     src/device_buffer.hpp
+    src/device_kernel.h
 )
 
 set(LIBSGM_PUBLIC_HDRS

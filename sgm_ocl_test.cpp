@@ -47,7 +47,7 @@ void context_error_callback(const char* errinfo, const void* private_info, size_
     std::cout << "opencl error : " << errinfo << std::endl;
 }
 
-cl_context initCLCTX(int platform_idx, int device_idx)
+std::tuple<cl_context, cl_device_id> initCLCTX(int platform_idx, int device_idx)
 {
     cl_uint num_platform;
     clGetPlatformIDs(0, nullptr, &num_platform);
@@ -88,7 +88,7 @@ cl_context initCLCTX(int platform_idx, int device_idx)
             (void*)dev_name.data(), nullptr);
         std::cout << "Device name: " << dev_name << std::endl;
     }
-    return cl_ctx;
+    return std::make_tuple(cl_ctx, cl_device);
 }
 
 
@@ -211,7 +211,9 @@ int main(int argc, char* argv[]) {
     float b_d = (float)cv::norm(T, cv::NORM_L2);
 
 
-    cl_context cl_ctx = initCLCTX(1, 0);
+    cl_context cl_ctx;
+    cl_device_id cl_device;
+    std::tie(cl_ctx, cl_device) = initCLCTX(1, 0);
 
     int input_depth = 8;
     int output_depth = 8;
@@ -227,6 +229,7 @@ int main(int argc, char* argv[]) {
         output_depth,
         sgm::cl::EXECUTE_INOUT_DEVICE2DEVICE,
         cl_ctx,
+        cl_device,
         params);// , bits, 16, fl, cx, cy, b_d);
 
     uint16_t* d_output_buffer = nullptr;
