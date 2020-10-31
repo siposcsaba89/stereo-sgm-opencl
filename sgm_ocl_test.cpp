@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
 
     cl_context cl_ctx;
     cl_device_id cl_device;
-    std::tie(cl_ctx, cl_device) = initCLCTX(1, 0);
+    std::tie(cl_ctx, cl_device) = initCLCTX(0, 0);
 
     int input_depth = 8;
     int output_depth = 8;
@@ -222,12 +222,10 @@ int main(int argc, char* argv[]) {
     params.subpixel = false;
     params.uniqueness = 0.95f;
 
-    sgm::cl::StereoSGM ssgm(width,
+    sgm::cl::StereoSGM<uint8_t> ssgm(width,
         height,
         disp_size,
-        input_depth,
         output_depth,
-        sgm::cl::EXECUTE_INOUT_DEVICE2DEVICE,
         cl_ctx,
         cl_device,
         params);// , bits, 16, fl, cx, cy, b_d);
@@ -292,8 +290,8 @@ int main(int argc, char* argv[]) {
         //		ssgm.execute(left.data, right.data, (void**)&d_output_buffer, v_disp.data, v_disp_road.data(), u_disp.data, cu_disp.data,
         //			free_space.data(), free_space_voting_res.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
         static cv::Mat disp(img_size, CV_16UC1), disp_color, disp_8u;
-
-        ssgm.execute(left.data, right.data, disp.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
+        cv::imshow("left", left);
+        ssgm.execute(left.data, right.data, reinterpret_cast<uint16_t*>(disp.data));
         std::cout << clock() - st << std::endl;
 
         disp.convertTo(disp_8u, CV_8U, 255. / disp_size);
@@ -302,7 +300,6 @@ int main(int argc, char* argv[]) {
 
 
         cv::imshow("disp", disp_color);
-        cv::imshow("left", left);
 
 
         int key = cv::waitKey(1);

@@ -19,6 +19,7 @@ limitations under the License.
 #include <cstdint>
 #include "libsgm_ocl/libsgm_ocl.h"
 #include "types.hpp"
+#include "device_buffer.hpp"
 
 namespace sgm
 {
@@ -36,25 +37,16 @@ private:
     std::unique_ptr<Impl> m_impl;
 
 public:
-    SemiGlobalMatching();
+    SemiGlobalMatching(cl_context context, cl_device_id device);
     ~SemiGlobalMatching();
 
-    void execute(
-        output_type* dest_left,
-        output_type* dest_right,
-        const input_type* src_left,
-        const input_type* src_right,
-        int width,
-        int height,
-        int src_pitch,
-        int dst_pitch,
-        const Parameters& param);
-
     void enqueue(
-        output_type* dest_left,
-        output_type* dest_right,
-        const input_type* src_left,
-        const input_type* src_right,
+        DeviceBuffer<output_type>& dest_left,
+        DeviceBuffer<output_type>& dest_right,
+        const DeviceBuffer<input_type> & src_left,
+        const DeviceBuffer<input_type> & src_right,
+        DeviceBuffer<feature_type>& feature_buffer_left,
+        DeviceBuffer<feature_type>& feature_buffer_right,
         int width,
         int height,
         int src_pitch,

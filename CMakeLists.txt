@@ -28,6 +28,7 @@ set(LIBSGM_SRCS
     src/path_aggregation.cpp
     src/path_aggregation_vertical.cpp
     src/sgm.hpp
+    src/sgm.cpp
     src/device_buffer.hpp
     src/device_kernel.h
 )

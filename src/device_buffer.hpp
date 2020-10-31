@@ -36,18 +36,30 @@ template <typename value_type>
 class DeviceBuffer
 {
 public:
-    DeviceBuffer()
-        : m_data(nullptr)
+    DeviceBuffer(cl_context ctx)
+        : m_cl_ctx(ctx)
+        , m_data(nullptr)
         , m_size(0)
+        , m_owns_data(false)
     { }
 
     explicit DeviceBuffer(cl_context ctx, size_t n)
-        : m_data(nullptr)
+        : m_cl_ctx(ctx)
+        , m_data(nullptr)
         , m_size(0)
-        , m_cl_ctx(ctx)
+        , m_owns_data(false)
     {
         allocate(n);
     }
+
+    explicit DeviceBuffer(cl_context ctx, size_t n, cl_mem data)
+        : m_cl_ctx(ctx)
+        , m_data(data)
+        , m_size(n)
+        , m_owns_data(false)
+    {
+    }
+
 
     DeviceBuffer(const DeviceBuffer&) = delete;
 
@@ -70,14 +82,15 @@ public:
 
         destroy();
         cl_int err;
-        clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(value_type) * n, nullptr, &err);
+        m_data = clCreateBuffer(m_cl_ctx, CL_MEM_READ_WRITE, sizeof(value_type) * n, nullptr, &err);
         CHECK_OCL_ERROR(err, "Allocating device buffer");
         m_size = n;
+        m_owns_data = true;
     }
 
     void destroy()
     {
-        if (m_data)
+        if (m_data && m_owns_data)
         {
             cl_int err = clReleaseMemObject(m_data);
             CHECK_OCL_ERROR(err, "Destroying device buffer");
@@ -119,9 +132,10 @@ public:
         return m_data;
     }
 private:
-    cl_context m_cl_ctx;
-    cl_mem m_data;
-    size_t m_size;
+    cl_context m_cl_ctx = nullptr;
+    cl_mem m_data = nullptr;
+    size_t m_size = 0;
+    bool m_owns_data = false;
 };
 
 }

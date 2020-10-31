@@ -20,41 +20,73 @@ namespace sgm
 {
 namespace cl
 {
+static const int SUBPIXEL_SHIFT = 4;
+static const int SUBPIXEL_SCALE = (1 << SUBPIXEL_SHIFT);
 
-static bool is_device_input(EXECUTE_INOUT type) { return (type & 0x1) > 0; }
-static bool is_device_output(EXECUTE_INOUT type) { return (type & 0x2) > 0; }
-
-
+template <typename input_type>
 class SemiGlobalMatchingBase 
 {
 public:
     using output_type = output_type;
-    virtual void execute(output_type* dst_L,
-        output_type* dst_R,
-        const void* src_L,
-        const void* src_R,
-        int w, int h, int sp, int dp,
-        Parameters& param) = 0;
+    virtual void execute(DeviceBuffer<output_type>& dst_L,
+        DeviceBuffer<output_type>& dst_R,
+        const DeviceBuffer<input_type>& src_L,
+        const DeviceBuffer<input_type>& src_R,
+        DeviceBuffer<feature_type>& feature_buff_l,
+        DeviceBuffer<feature_type>& feature_buff_r,
+        int w,
+        int h,
+        int sp,
+        int dp,
+        Parameters& param,
+        cl_command_queue queue) = 0;
 
     virtual ~SemiGlobalMatchingBase() {}
 };
 
 template <typename input_type, int DISP_SIZE>
-class SemiGlobalMatchingImpl : public SemiGlobalMatchingBase 
+class SemiGlobalMatchingImpl : public SemiGlobalMatchingBase<input_type>
 {
 public:
-    void execute(output_type* dst_L, output_type* dst_R, const void* src_L, const void* src_R,
-        int w, int h, int sp, int dp, Parameters& param) override
+    SemiGlobalMatchingImpl(cl_context ctx, cl_device_id device)
+        : sgm_engine_(ctx, device) {}
+    void execute(
+        DeviceBuffer<output_type> & dst_L,
+        DeviceBuffer<output_type> & dst_R,
+        const DeviceBuffer<input_type> & src_L,
+        const DeviceBuffer<input_type>& src_R,
+        DeviceBuffer<feature_type>& feature_buff_l,
+        DeviceBuffer<feature_type>& feature_buff_r,
+        int w,
+        int h,
+        int sp, 
+        int dp, 
+        Parameters& param,
+        cl_command_queue queue) override
     {
-        sgm_engine_.execute(dst_L, dst_R, (const input_type*)src_L, (const input_type*)src_R, w, h, sp, dp, param);
+        sgm_engine_.enqueue(dst_L,
+            dst_R,
+            src_L,
+            src_R,
+            feature_buff_l,
+            feature_buff_r,
+            w, 
+            h,
+            sp,
+            dp,
+            param,
+            queue);
     }
+    virtual ~SemiGlobalMatchingImpl() {}
 private:
     SemiGlobalMatching<input_type, DISP_SIZE> sgm_engine_;
 };
 
-
+template <typename input_type>
 struct CudaStereoSGMResources
 {
+    DeviceBuffer<feature_type> d_feature_buffer_left;
+    DeviceBuffer<feature_type> d_feature_buffer_right;
     DeviceBuffer<uint8_t> d_src_left;
     DeviceBuffer<uint8_t> d_src_right;
     DeviceBuffer<uint16_t> d_left_disp;
@@ -62,38 +94,41 @@ struct CudaStereoSGMResources
     DeviceBuffer<uint16_t> d_tmp_left_disp;
     DeviceBuffer<uint16_t> d_tmp_right_disp;
 
-    std::unique_ptr<SemiGlobalMatchingBase> sgm_engine;
+
+
+    std::unique_ptr<SemiGlobalMatchingBase<input_type>> sgm_engine;
 
     CudaStereoSGMResources(int width_,
         int height_,
         int disparity_size_,
-        int input_depth_bits_,
         int output_depth_bits_,
         int src_pitch_,
         int dst_pitch_,
-        EXECUTE_INOUT inout_type_,
-        cl_command_queue queue) 
+        cl_context ctx,
+        cl_device_id device,
+        cl_command_queue queue)
+        : d_feature_buffer_left(ctx)
+        , d_feature_buffer_right(ctx)
+        , d_src_left(ctx)
+        , d_src_right(ctx)
+        , d_left_disp(ctx)
+        , d_right_disp(ctx)
+        , d_tmp_left_disp(ctx)
+        , d_tmp_right_disp(ctx)
     {
 
-        if (input_depth_bits_ == 8 && disparity_size_ == 64)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 64>>();
-        else if (input_depth_bits_ == 8 && disparity_size_ == 128)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 128>>();
-        else if (input_depth_bits_ == 8 && disparity_size_ == 256)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint8_t, 256>>();
-        else if (input_depth_bits_ == 16 && disparity_size_ == 64)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 64>>();
-        else if (input_depth_bits_ == 16 && disparity_size_ == 128)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 128>>();
-        else if (input_depth_bits_ == 16 && disparity_size_ == 256)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<uint16_t, 256>>();
+        if (disparity_size_ == 64)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 64>>(ctx, device);
+        else if (disparity_size_ == 128)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 128>>(ctx, device);
+        else if (disparity_size_ == 256)
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 256>>(ctx, device);
         else
             throw std::logic_error("depth bits must be 8 or 16, and disparity size must be 64 or 128");
 
-        if (!is_device_input(inout_type_)) {
-            this->d_src_left.allocate(input_depth_bits_ / 8 * src_pitch_ * height_);
-            this->d_src_right.allocate(input_depth_bits_ / 8 * src_pitch_ * height_);
-        }
+        d_feature_buffer_left .allocate(static_cast<size_t>(width_ * height_));
+        d_feature_buffer_right.allocate(static_cast<size_t>(width_ * height_));
+
 
         this->d_left_disp.allocate(dst_pitch_ * height_);
         this->d_right_disp.allocate(dst_pitch_ * height_);
@@ -113,63 +148,167 @@ struct CudaStereoSGMResources
     }
 };
 
-StereoSGM::StereoSGM(int width,
+template <typename input_type>
+StereoSGM<input_type>::StereoSGM(int width,
     int height,
     int disparity_size,
-    int input_depth_bits,
     int output_depth_bits,
-    EXECUTE_INOUT inout_type,
     cl_context ctx,
     cl_device_id cl_device,
     const Parameters& param) 
     : StereoSGM(width,
         height,
         disparity_size,
-        input_depth_bits,
         output_depth_bits,
         width,
         width,
-        inout_type,
         ctx,
         cl_device,
         param)
 {
 }
 
+static bool has_enough_depth(int output_depth_bits, int disparity_size, int min_disp, bool subpixel)
+{
+    // simulate minimum/maximum value
+    int64_t max = static_cast<int64_t>(disparity_size) + min_disp - 1;
+    if (subpixel)
+    {
+        max *= sgm::cl::SUBPIXEL_SCALE;
+        max += sgm::cl::SUBPIXEL_SCALE - 1;
+    }
 
-StereoSGM::StereoSGM(int width,
+    if (1ll << output_depth_bits <= max)
+        return false;
+
+    if (min_disp <= 0)
+    {
+        // whether or not output can be represented by signed
+        int64_t min = static_cast<int64_t>(min_disp) - 1;
+        if (subpixel)
+        {
+            min *= sgm::cl::SUBPIXEL_SCALE;
+        }
+
+        if (min < -(1ll << (output_depth_bits - 1))
+            || 1ll << (output_depth_bits - 1) <= max)
+            return false;
+    }
+
+    return true;
+}
+
+
+template <typename input_type>
+StereoSGM<input_type>::StereoSGM(int width,
     int height,
     int disparity_size,
-    int input_depth_bits,
     int output_depth_bits,
     int src_pitch,
     int dst_pitch,
-    EXECUTE_INOUT inout_type,
     cl_context ctx,
     cl_device_id cl_device,
     const Parameters& param)
     : m_width(width)
     , m_height(height)
     , m_max_disparity(disparity_size)
-    , m_input_depth_bits(input_depth_bits)
     , m_output_depth_bits(output_depth_bits)
     , m_src_pitch(src_pitch)
     , m_dst_pitch(dst_pitch)
-    , m_inout_type(inout_type)
     , m_cl_ctx(ctx)
     , m_cl_device(cl_device)
 {
+    //create command queue
     initCL();
-}
+    // check values
+    if (output_depth_bits != 8
+        && output_depth_bits != 16) 
+    {
+        width = height = output_depth_bits = disparity_size = 0;
+        throw std::logic_error("depth bits must be 8 or 16");
+    }
+    if (disparity_size != 64 && disparity_size != 128 && disparity_size != 256)
+    {
+        width = height = output_depth_bits = disparity_size = 0;
+        throw std::logic_error("disparity size must be 64, 128 or 256");
+    }
+    if (!has_enough_depth(output_depth_bits, disparity_size, param.min_disp, param.subpixel))
+    {
+        width = height = output_depth_bits = disparity_size = 0;
+        throw std::logic_error("output depth bits must be sufficient for representing output value");
+    }
+    if (param.path_type != PathType::SCAN_4PATH && param.path_type != PathType::SCAN_8PATH)
+    {
+        width = height = output_depth_bits = disparity_size = 0;
+        throw std::logic_error("Path type must be PathType::SCAN_4PATH or PathType::SCAN_8PATH");
+    }
 
-StereoSGM::~StereoSGM()
+    m_cu_res = new CudaStereoSGMResources<input_type>(width,
+        height,
+        disparity_size,
+        output_depth_bits,
+        src_pitch,
+        dst_pitch,
+        m_cl_ctx,
+        m_cl_device,
+        m_cl_cmd_queue);
+
+}
+template <typename input_type>
+StereoSGM<input_type>::~StereoSGM()
 {
 }
-
-void StereoSGM::execute(void* left_data, void* right_data, void* output_buffer)
+template <typename input_type>
+void StereoSGM<input_type>::execute(const input_type* left_pixels,
+    const input_type* right_pixels,
+    uint16_t* dst)
 {
-//    cl_int err;
-//
+
+    if (m_cu_res->d_src_left.size() == 0)
+    {
+        size_t size = m_src_pitch * m_height;
+        m_cu_res->d_src_left.allocate(size);
+        m_cu_res->d_src_right.allocate(size);
+    }
+
+
+    cl_int err = clEnqueueWriteBuffer(m_cl_cmd_queue,
+        m_cu_res->d_src_left.data(),
+        false, // blocking
+        0, //offset
+        m_src_pitch * m_height * sizeof(input_type),
+        left_pixels,
+        0, nullptr, nullptr);
+
+    err = clEnqueueWriteBuffer(m_cl_cmd_queue,
+        m_cu_res->d_src_right.data(),
+        false, // blocking
+        0, //offset
+        m_src_pitch * m_height * sizeof(input_type),
+        right_pixels,
+        0, nullptr, nullptr);
+    execute(m_cu_res->d_src_left.data(), m_cu_res->d_src_right.data(), m_cu_res->d_left_disp.data());
+
+    err = clEnqueueReadBuffer(m_cl_cmd_queue,
+        m_cu_res->d_left_disp.data(),
+        true, // blocking
+        0, //offset
+        m_dst_pitch * m_height * sizeof(uint16_t),
+        dst,
+        0, nullptr, nullptr);
+    finishQueue();
+
+    //todo support uint8_t output
+    //if (!is_cuda_output(inout_type_) && output_depth_bits_ == 8) {
+    //    sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)d_tmp_left_disp, dst_pitch_ * height_);
+    //    CudaSafeCall(cudaMemcpy(dst, d_tmp_left_disp, sizeof(uint8_t) * dst_pitch_ * height_, cudaMemcpyDeviceToHost));
+    //}
+    //else if (is_cuda_output(inout_type_) && output_depth_bits_ == 8) {
+    //    sgm::details::cast_16bit_8bit_array((const uint16_t*)d_left_disp, (uint8_t*)dst, dst_pitch_ * height_);
+    //}
+
+    //    cl_int err;
+    //
 //    //d_src_left->write(left_data);
 //    err = clEnqueueWriteBuffer(m_cl_cmd_queue,
 //        d_src_left,
@@ -213,20 +352,50 @@ void StereoSGM::execute(void* left_data, void* right_data, void* output_buffer)
 //    check_consistency_left();
 //    finishQueue();
 //
-//    err = clEnqueueReadBuffer(m_cl_cmd_queue,
-//        d_tmp_left_disp,
-//        true, // blocking
-//        0, //offset
-//        m_width * m_height * sizeof(uint16_t),
-//        output_buffer,
-//        0, nullptr, nullptr);
+
 //
 //    //d_tmp_left_disp->read(output_buffer);
 //    //m_context->finish(0);
 //
 }
 
-void StereoSGM::initCL()
+template<typename input_type>
+void StereoSGM<input_type>::execute(cl_mem left_pixels, cl_mem right_pixels, cl_mem dst)
+{
+
+    DeviceBuffer<input_type> left_img(m_cl_ctx,
+        m_src_pitch * m_height * sizeof(input_type),
+        left_pixels);
+    DeviceBuffer<input_type> right_img(m_cl_ctx,
+        m_src_pitch * m_height * sizeof(input_type),
+        right_pixels);
+    DeviceBuffer<input_type> disparity(m_cl_ctx,
+        m_dst_pitch * m_height * sizeof(uint16_t),
+        dst);
+
+    m_cu_res->sgm_engine->execute(m_cu_res->d_tmp_left_disp,
+        m_cu_res->d_tmp_right_disp,
+        left_img,
+        right_img,
+        m_cu_res->d_feature_buffer_left,
+        m_cu_res->d_feature_buffer_right,
+        m_width,
+        m_height,
+        m_src_pitch,
+        m_dst_pitch,
+        m_params,
+        m_cl_cmd_queue);
+
+}
+
+template<typename input_type>
+int StereoSGM<input_type>::get_invalid_disparity() const
+{
+    return (m_params.min_disp - 1) * (m_params.subpixel ? SUBPIXEL_SCALE : 1);
+}
+
+template <typename input_type>
+void StereoSGM<input_type>::initCL()
 {
     cl_int err;
     m_cl_cmd_queue = clCreateCommandQueue(m_cl_ctx, m_cl_device, 0, &err);
@@ -426,20 +595,16 @@ void StereoSGM::initCL()
     //clSetKernelArg(m_copy_u8_to_u16, 1, sizeof(cl_mem), &d_scost);
 }
 
-
-void StereoSGM::finishQueue()
+template <typename input_type>
+void StereoSGM<input_type>::finishQueue()
 {
     cl_int err = clFinish(m_cl_cmd_queue);
     CHECK_OCL_ERROR(err, "Error finishing queue");
 }
 
 
-void StereoSGM::census()
-{
-}
-
-void StereoSGM::mem_init()
-{
+//void StereoSGM::mem_init()
+//{
     //{
     //    clSetKernelArg(m_clear_buffer, 0, sizeof(cl_mem), &d_left_disparity);
     //    size_t global_size = (m_width* m_height * sizeof(uint16_t) / 32 / 256) * 256;
@@ -478,11 +643,11 @@ void StereoSGM::mem_init()
     ////        0, nullptr, nullptr);
     ////
     ////}
-}
+//}
 
-void StereoSGM::path_aggregation()
-{
-
+//void StereoSGM::path_aggregation()
+//{
+//
 //    static constexpr unsigned int WARP_SIZE = 32u;
 //    static constexpr unsigned int DP_BLOCK_SIZE = 16u;
 //    static constexpr unsigned int BLOCK_SIZE_PA = WARP_SIZE * 8u;
@@ -520,10 +685,10 @@ void StereoSGM::path_aggregation()
 //
 //
 //    int alma = 0;
-}
+//}
 
-void StereoSGM::winner_takes_all()
-{
+//void StereoSGM::winner_takes_all()
+//{
 //    const size_t WTA_PIXEL_IN_BLOCK = 8;
 //    //(*m_winner_takes_all_kernel128)(0,
 //    //    napalm::ImgRegion(m_width / WTA_PIXEL_IN_BLOCK, 1 * m_height),
@@ -541,10 +706,10 @@ void StereoSGM::winner_takes_all()
 //        global_size,
 //        local_size,
 //        0, nullptr, nullptr);
-}
+//}
 
-void StereoSGM::median()
-{
+//void StereoSGM::median()
+//{
 //    size_t global_size[2] = {
 //        (size_t)((m_width + 16 - 1) / 16) * 16,
 //        (size_t)((m_height + 16 - 1) / 16) * 16
@@ -581,10 +746,10 @@ void StereoSGM::median()
 //        0, nullptr, nullptr);
 //
 //
-}
+//}
 
-void StereoSGM::check_consistency_left()
-{
+//void StereoSGM::check_consistency_left()
+//{
 //    //(*m_check_consistency_left)(0,
 //    //    napalm::ImgRegion((m_width + 16 - 1) / 16, (m_height + 16 - 1) / 16),
 //    //    napalm::ImgRegion(16, 16));
@@ -601,8 +766,11 @@ void StereoSGM::check_consistency_left()
 //        global_size,
 //        local_size,
 //        0, nullptr, nullptr);
-}
+//}
 
+// explicit instantiate for uint8_t and uint16_t
+template class StereoSGM<uint8_t>;
+template class StereoSGM<uint16_t>;
 
 }
 }

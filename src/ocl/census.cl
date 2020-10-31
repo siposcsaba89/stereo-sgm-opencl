@@ -20,7 +20,7 @@
 #define WINDOW_HEIGHT  7
 #define BLOCK_SIZE_CENSUS 128
 #define LINES_PER_BLOCK 16
-#define SMEM_BUFFER_SIZE WINDOW_HEIGHT + 1
+#define SMEM_BUFFER_SIZE (WINDOW_HEIGHT + 1)
 
 
 kernel void census_transform_kernel(
@@ -39,10 +39,12 @@ kernel void census_transform_kernel(
     const int x0 = get_group_id(0) * (BLOCK_SIZE_CENSUS - WINDOW_WIDTH + 1) - half_kw;
     const int y0 = get_group_id(1) * LINES_PER_BLOCK;
 
-    for (int i = 0; i < WINDOW_HEIGHT; ++i) {
+    for (int i = 0; i < WINDOW_HEIGHT; ++i) 
+    {
         const int x = x0 + tid, y = y0 - half_kh + i;
         pixel_type value = 0;
-        if (0 <= x && x < width && 0 <= y && y < height) {
+        if (0 <= x && x < width && 0 <= y && y < height) 
+        {
             value = src[x + y * pitch];
         }
         smem_lines[i][tid] = value;
@@ -50,12 +52,15 @@ kernel void census_transform_kernel(
     barrier(CLK_LOCAL_MEM_FENCE);
 
 #pragma unroll
-    for (int i = 0; i < LINES_PER_BLOCK; ++i) {
-        if (i + 1 < LINES_PER_BLOCK) {
+    for (int i = 0; i < LINES_PER_BLOCK; ++i) 
+    {
+        if (i + 1 < LINES_PER_BLOCK) 
+        {
             // Load to smem
             const int x = x0 + tid, y = y0 + half_kh + i + 1;
             pixel_type value = 0;
-            if (0 <= x && x < width && 0 <= y && y < height) {
+            if (0 <= x && x < width && 0 <= y && y < height) 
+            {
                 value = src[x + y * pitch];
             }
             const int smem_x = tid;

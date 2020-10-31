@@ -58,15 +58,12 @@ public:
         {
             throw std::runtime_error("Cannot find ocl kernel: " + name);
         }
+        return ret;
     }
 
     ~DeviceProgram()
     {
-        cl_int status = clReleaseProgram(m_cl_program);
-        if (status != CL_SUCCESS)
-        {
-            throw std::runtime_error("clReleaseProgram failed with error code: "+ std::to_string(status));
-        }
+        clReleaseProgram(m_cl_program);
     }
 
     bool isInitialized() const

@@ -11,7 +11,7 @@ namespace sgm
 {
 namespace cl
 {
-
+template <typename input_type>
 struct CudaStereoSGMResources;
 
 //types.hpp
@@ -19,17 +19,6 @@ using feature_type = uint32_t;
 using cost_type = uint8_t;
 using cost_sum_type = uint16_t;
 using output_type = uint16_t;
-
-/**
-* @enum DST_TYPE
-* Indicates input/output pointer type.
-*/
-enum EXECUTE_INOUT {
-    EXECUTE_INOUT_HOST2HOST = (0 << 1) | 0,
-    EXECUTE_INOUT_HOST2DEVICE = (1 << 1) | 0,
-    EXECUTE_INOUT_DEVICE2HOST = (0 << 1) | 1,
-    EXECUTE_INOUT_DEVICE2DEVICE = (1 << 1) | 1,
-};
 
 /**
  Indicates number of scanlines which will be used.
@@ -70,6 +59,7 @@ struct Parameters
     { }
 };
 
+template <typename input_type>
 class StereoSGM
 {
 public:
@@ -87,9 +77,7 @@ public:
     StereoSGM(int width,
         int height,
         int disparity_size,
-        int input_depth_bits,
         int output_depth_bits,
-        EXECUTE_INOUT inout_type,
         cl_context ctx,
         cl_device_id cl_device,
         const Parameters& param = Parameters());
@@ -110,42 +98,72 @@ public:
     StereoSGM(int width,
         int height,
         int disparity_size,
-        int input_depth_bits,
         int output_depth_bits,
         int src_pitch,
         int dst_pitch,
-        EXECUTE_INOUT inout_type,
         cl_context ctx,
         cl_device_id cl_device,
         const Parameters& param = Parameters());
 
     ~StereoSGM();
-    void execute(void* left_data, void* right_data, void* output_buffer);
+    /**
+    * Execute stereo semi global matching.
+    * @param left_pixels  A pointer stored input left image in host memory.
+    * @param right_pixels A pointer stored input right image in host memory.
+    * @param dst          Output pointer in host memory. User must allocate enough memory.
+    * @attention
+    * You need to allocate dst memory at least width x height x sizeof(element_type) bytes.
+    * The element_type is uint8_t for output_depth_bits == 8 and uint16_t for output_depth_bits == 16.
+    * Note that dst element value would be multiplied StereoSGM::SUBPIXEL_SCALE if subpixel option was enabled.
+    * Value of Invalid disparity is equal to return value of `get_invalid_disparity` member function.
+    */
+    void execute(const input_type* left_pixels, const input_type* right_pixels, uint16_t* dst);
+   
+    /**
+    * Execute stereo semi global matching.
+    * @param left_pixels  A pointer stored input left image in device memory.
+    * @param right_pixels A pointer stored input right image in device memory.
+    * @param dst          Output pointer in device memory. User must allocate enough memory.
+    * @attention
+    * You need to allocate dst memory at least width x height x sizeof(element_type) bytes.
+    * The element_type is uint8_t for output_depth_bits == 8 and uint16_t for output_depth_bits == 16.
+    * Note that dst element value would be multiplied StereoSGM::SUBPIXEL_SCALE if subpixel option was enabled.
+    * Value of Invalid disparity is equal to return value of `get_invalid_disparity` member function.
+    */
+    void execute(cl_mem left_pixels, cl_mem right_pixels, cl_mem dst);
+
+
+    /**
+    * Generate invalid disparity value from Parameter::min_disp and Parameter::subpixel
+    * @attention
+    * Cast properly if you receive disparity value as `unsigned` type.
+    * See sample/movie for an example of this.
+    */
+    int get_invalid_disparity() const;
+
 private:
     void initCL();
-    void initCLCTX(int platform_idx, int device_idx);
+    //void initCLCTX(int platform_idx, int device_idx);
     void finishQueue();
-    void census();
-    void mem_init();
-    void path_aggregation();
-    void winner_takes_all();
-    void median();
-    void check_consistency_left();
+    //void census();
+    //void mem_init();
+    //void path_aggregation();
+    //void winner_takes_all();
+    //void median();
+    //void check_consistency_left();
 private:
 
     StereoSGM(const StereoSGM&) = delete;
     StereoSGM& operator=(const StereoSGM&) = delete;
 
-    CudaStereoSGMResources* m_cu_res = nullptr;
+    CudaStereoSGMResources<input_type>* m_cu_res = nullptr;
 
     int m_width = -1;
     int m_height = -1;
     int m_max_disparity = -1;
-    int m_input_depth_bits;
     int m_output_depth_bits;
     int m_dst_pitch;
     int m_src_pitch;
-    EXECUTE_INOUT m_inout_type;
     Parameters m_params = Parameters();
 
 

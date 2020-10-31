@@ -21,7 +21,8 @@ template <typename input_type>
 class CensusTransform
 {
 public:
-    CensusTransform(cl_context ctx);
+    CensusTransform(cl_context ctx,
+        cl_device_id device);
     ~CensusTransform();
     const cl_mem get_output() const {
         return m_feature_buffer.data();
@@ -29,13 +30,13 @@ public:
 
     void enqueue(
         const DeviceBuffer<input_type> & src,
+        DeviceBuffer<feature_type>& feature_buffer,
         int width,
         int height,
         int pitch,
         cl_command_queue stream);
 
 private:
-    DeviceBuffer<feature_type> m_feature_buffer;
     DeviceProgram m_program;
     cl_context m_cl_ctx = nullptr;
     cl_device_id m_cl_device = nullptr;
@@ -44,8 +45,10 @@ private:
 
 
 template<typename input_type>
-inline CensusTransform<input_type>::CensusTransform(cl_context ctx)
+inline CensusTransform<input_type>::CensusTransform(cl_context ctx,
+    cl_device_id device)
     : m_cl_ctx(ctx)
+    , m_cl_device(device)
 {
 }
 
@@ -53,20 +56,16 @@ template<typename input_type>
 inline CensusTransform<input_type>::~CensusTransform()
 {
     clReleaseKernel(m_census_kernel);
-    m_feature_buffer.destroy();
 }
 
 template<typename input_type>
 inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> & src,
+    DeviceBuffer<feature_type> & feature_buffer,
     int width,
     int height,
     int pitch,
     cl_command_queue stream)
 {
-    if (m_feature_buffer.size() != static_cast<size_t>(width * height))
-    {
-        m_feature_buffer = DeviceBuffer<feature_type>(m_cl_ctx, width * height);
-    }
     if (m_census_kernel == nullptr)
     {
         std::string kernel_template_types;
@@ -86,7 +85,7 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         }
         //resource reading
         auto fs = cmrc::ocl_sgm::get_filesystem();
-        auto kernel_rc = fs.open("libsgm_ocl/census.cl");
+        auto kernel_rc = fs.open("src/ocl/census.cl");
         auto kernel = std::string(kernel_rc.begin(), kernel_rc.end());
         std::regex px_type_regex("@pixel_type@");
         kernel = std::regex_replace(kernel, px_type_regex, kernel_template_types);
@@ -101,7 +100,7 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
     cl_int err = clSetKernelArg(m_census_kernel,
         0,
         sizeof(cl_mem),
-        &m_feature_buffer.data());
+        &feature_buffer.data());
     err = clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &src.data());
     err = clSetKernelArg(m_census_kernel, 2, sizeof(width), &width);
     err = clSetKernelArg(m_census_kernel, 3, sizeof(height), &height);
@@ -116,7 +115,7 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         (size_t)((height + height_per_block - 1) / height_per_block)
     };
     size_t local_size[2] = { BLOCK_SIZE, 1 };
-    cl_int err = clEnqueueNDRangeKernel(stream,
+    err = clEnqueueNDRangeKernel(stream,
         m_census_kernel,
         2,
         nullptr,
