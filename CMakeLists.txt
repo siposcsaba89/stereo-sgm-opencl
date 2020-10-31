@@ -12,8 +12,10 @@ find_package(OpenCL REQUIRED)
 include(CMakeRC.cmake)
 
 set(OCL_FILES
+    src/ocl/inttypes.cl
+    src/ocl/utility.cl
     src/ocl/census.cl
-    src/ocl/common.cl
+    src/ocl/path_aggregation_common.cl
     src/ocl/path_aggregation_vertical.cl
 )
 
@@ -35,6 +37,7 @@ set(LIBSGM_SRCS
 
 set(LIBSGM_PUBLIC_HDRS
     libsgm_ocl/libsgm_ocl.h
+    libsgm_ocl/types.h
 )
 
 add_library(libsgm_ocl ${LIBSGM_SRCS} ${LIBSGM_PUBLIC_HDRS} ${OCL_FILES})
@@ -49,6 +52,9 @@ source_group(libsgm_ocl FILES ${LIBSGM_PUBLIC_HDRS})
 #   target_include_directories(libsgm_ocl PRIVATE "${TMP}")
 #little bit nicer
 target_link_libraries(libsgm_ocl PRIVATE $<BUILD_INTERFACE:rc_ocl_sgm>)
+#for debugging
+find_package(OpenCV REQUIRED)
+target_link_libraries(libsgm_ocl PRIVATE ${OpenCV_LIBRARIES})
 
 set_target_properties(libsgm_ocl PROPERTIES DEBUG_POSTFIX _d RELWITHDEBINFO_POSTFIX _rd)
 target_include_directories(libsgm_ocl

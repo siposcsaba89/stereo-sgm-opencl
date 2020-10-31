@@ -18,7 +18,6 @@ limitations under the License.
 #include <memory>
 #include <cstdint>
 #include "libsgm_ocl/libsgm_ocl.h"
-#include "types.hpp"
 #include "device_buffer.hpp"
 
 namespace sgm
@@ -30,7 +29,7 @@ template <typename input_type, size_t MAX_DISPARITY>
 class SemiGlobalMatching
 {
 public:
-    using output_type = sgm::output_type;
+    using output_type = sgm::cl::output_type;
 
 private:
     class Impl;

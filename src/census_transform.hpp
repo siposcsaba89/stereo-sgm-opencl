@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include "libsgm_ocl/types.h"
 #include "device_buffer.hpp"
 #include "device_kernel.h"
 #include <regex>
@@ -11,6 +11,9 @@ CMRC_DECLARE(ocl_sgm);
 #define WINDOW_HEIGHT  7
 #define BLOCK_SIZE 128
 #define LINES_PER_BLOCK 16
+
+//for debugging:
+#include <opencv2/opencv.hpp>
 
 namespace sgm
 {
@@ -123,6 +126,11 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         local_size,
         0, nullptr, nullptr);
     CHECK_OCL_ERROR(err, "Error enequeuing census kernel");
+    clFinish(stream);
+    cv::Mat census(height, width, CV_8UC4);
+    clEnqueueReadBuffer(stream, feature_buffer.data(), true, 0, width * height * 4, census.data, 0, nullptr, nullptr);
+    cv::imshow("census_res", census);
+    cv::waitKey(0);
 }
 
 }

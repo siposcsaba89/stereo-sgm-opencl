@@ -2,6 +2,7 @@
 
 #include <CL/cl.h>
 #include <inttypes.h>
+#include "libsgm_ocl/types.h"
 
 // pixel and feature type defs
 #define pixel_type uint8_t
@@ -13,21 +14,6 @@ namespace cl
 {
 template <typename input_type>
 struct CudaStereoSGMResources;
-
-//types.hpp
-using feature_type = uint32_t;
-using cost_type = uint8_t;
-using cost_sum_type = uint16_t;
-using output_type = uint16_t;
-
-/**
- Indicates number of scanlines which will be used.
-*/
-enum class PathType {
-    SCAN_4PATH, //>! Horizontal and vertical paths.
-    SCAN_8PATH  //>! Horizontal, vertical and oblique paths.
-};
-
 
 struct Parameters
 {

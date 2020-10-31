@@ -36,7 +36,7 @@ template <typename value_type>
 class DeviceBuffer
 {
 public:
-    DeviceBuffer(cl_context ctx)
+    DeviceBuffer(cl_context ctx = nullptr)
         : m_cl_ctx(ctx)
         , m_data(nullptr)
         , m_size(0)
@@ -60,6 +60,13 @@ public:
     {
     }
 
+    void setBufferData(cl_context ctx, size_t n, cl_mem data)
+    {
+        m_cl_ctx = ctx;
+        m_size = n;
+        m_data = data;
+        m_owns_data = false;
+    }
 
     DeviceBuffer(const DeviceBuffer&) = delete;
 

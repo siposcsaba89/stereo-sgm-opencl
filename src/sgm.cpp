@@ -1,5 +1,6 @@
 #include "sgm.hpp"
 #include "census_transform.hpp"
+#include "path_aggregation.h"
 
 namespace sgm
 {
@@ -10,12 +11,13 @@ class SemiGlobalMatching<input_type, MAX_DISPARITY>::Impl {
 
 private:
     CensusTransform<input_type> m_census;
-    //PathAggregation<MAX_DISPARITY> m_path_aggregation;
+    PathAggregation<MAX_DISPARITY> m_path_aggregation;
     //WinnerTakesAll<MAX_DISPARITY> m_winner_takes_all;
 
 public:
     Impl(cl_context ctx, cl_device_id device)
         : m_census(ctx, device)
+        , m_path_aggregation(ctx, device)
         //, m_path_aggregation()
         //, m_winner_takes_all()
     { 
@@ -39,12 +41,15 @@ public:
             src_left, feature_buffer_left, width, height, src_pitch, stream);
         m_census.enqueue(
             src_right, feature_buffer_right, width, height, src_pitch, stream);
-        //m_path_aggregation.enqueue(
-        //    m_census_left.get_output(),
-        //    m_census_right.get_output(),
-        //    width, height,
-        //    param.path_type, param.P1, param.P2, param.min_disp,
-        //    stream);
+        m_path_aggregation.enqueue(
+            feature_buffer_left,
+            feature_buffer_right,
+            width, height,
+            param.path_type,
+            param.P1,
+            param.P2,
+            param.min_disp,
+            stream);
         //m_winner_takes_all.enqueue(
         //    dest_left, dest_right,
         //    m_path_aggregation.get_output(),
