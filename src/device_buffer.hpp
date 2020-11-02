@@ -110,9 +110,16 @@ public:
 
     void fillZero(cl_command_queue queue)
     {
-        //TODO
-        //clEnqueueFillBuffer(,m_data,)
-        //CudaSafeCall(cudaMemset(m_data, 0, sizeof(value_type) * m_size));
+        value_type pattern = 0;
+        clEnqueueFillBuffer(queue,
+            m_data,
+            &pattern,
+            sizeof(pattern),
+            0,
+            m_size * sizeof(value_type),
+            0,
+            nullptr,
+            nullptr);
     }
 
     DeviceBuffer& operator=(const DeviceBuffer&) = delete;

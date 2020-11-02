@@ -17,6 +17,7 @@ set(OCL_FILES
     src/ocl/census.cl
     src/ocl/path_aggregation_common.cl
     src/ocl/path_aggregation_vertical.cl
+    src/ocl/path_aggregation_horizontal.cl
 )
 
 cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})

@@ -9,6 +9,15 @@ inline uint32_t pack_uint8x4(uint32_t x, uint32_t y, uint32_t z, uint32_t w)
     return as_uint(uint8x4);
 }
 
+void store_uint8_vector_8u(global uint8_t* dest, const uint32_t* ptr)
+{
+    uint2 uint32x2;
+    uint32x2.x = pack_uint8x4(ptr[0], ptr[1], ptr[2], ptr[3]);
+    uint32x2.y = pack_uint8x4(ptr[4], ptr[5], ptr[6], ptr[7]);
+    global uint2* dest_ptr = (global uint2*) dest;
+    *dest_ptr = uint32x2;
+}
+
 void store_uint8_vector_16u(global uint8_t* dest,
     const uint32_t* ptr)
 {

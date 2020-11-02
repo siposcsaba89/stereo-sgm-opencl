@@ -9,6 +9,8 @@ PathAggregation<MAX_DISPARITY>::PathAggregation(cl_context ctx, cl_device_id dev
     : m_cost_buffer(ctx)
     , m_down2up(ctx, device)
     , m_up2down(ctx, device)
+    , m_right2left(ctx, device)
+    , m_left2right(ctx, device)
 {
     for (size_t i = 0; i < MAX_NUM_PATHS; ++i)
     {
@@ -49,7 +51,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
     {
         m_cost_buffer.allocate(buffer_size);
         m_sub_buffers.resize(num_paths);
-        for (int i = 0; i < num_paths; ++i)
+        for (unsigned i = 0; i < num_paths; ++i)
         {
             cl_buffer_region region = { buffer_step * i, buffer_step };
             cl_int err;
@@ -61,7 +63,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         }
     }
 
-
+    cl_int err = clFinish(stream);
+    CHECK_OCL_ERROR(err, "Error finishing queue");
     m_up2down.enqueue_aggregate_up2down_path(
         m_sub_buffers[0],
         left,
@@ -83,6 +86,28 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         p2,
         min_disp,
         m_streams[1]
+    );
+    m_left2right.enqueue(
+        m_sub_buffers[2],
+        left,
+        right,
+        width,
+        height,
+        p2,
+        p2,
+        min_disp,
+        m_streams[2]
+    );
+    m_right2left.enqueue(
+        m_sub_buffers[3],
+        left,
+        right,
+        width,
+        height,
+        p2,
+        p2,
+        min_disp,
+        m_streams[3]
     );
 
 }
@@ -123,15 +148,15 @@ inline void VerticalPathAggregation<DIRECTION, MAX_DISPARITY>::init()
          //Vertical path aggregation templates
         std::string kernel_DP_BLOCK_SIZE = "#define DP_BLOCK_SIZE " + std::to_string(DP_BLOCK_SIZE) + "\n";
         std::string kernel_SUBGROUP_SIZE = "#define SUBGROUP_SIZE " + std::to_string(SUBGROUP_SIZE) + "\n";
-        std::string kernel_BLOCK_SIZE = "#define BLOCK_SIZE " + std::to_string(BLOCK_SIZE_P) + "\n";
+        std::string kernel_BLOCK_SIZE = "#define BLOCK_SIZE " + std::to_string(BLOCK_SIZE) + "\n";
         std::string kernel_SIZE = "#define SIZE " + std::to_string(SUBGROUP_SIZE) + "\n";
         kernel_src = std::regex_replace(kernel_src, std::regex("@DP_BLOCK_SIZE@"), kernel_DP_BLOCK_SIZE);
         kernel_src = std::regex_replace(kernel_src, std::regex("@SUBGROUP_SIZE@"), kernel_SUBGROUP_SIZE);
         kernel_src = std::regex_replace(kernel_src, std::regex("@SIZE@"), kernel_SIZE);
         kernel_src = std::regex_replace(kernel_src, std::regex("@BLOCK_SIZE@"), kernel_BLOCK_SIZE);
 
-        std::cout << "vertical_path_aggregation combined: " << std::endl;
-        std::cout << kernel_src << std::endl;
+        //std::cout << "vertical_path_aggregation combined: " << std::endl;
+        //std::cout << kernel_src << std::endl;
 
         m_program.init(m_cl_ctx, m_cl_device, kernel_src);
         //DEBUG
@@ -146,6 +171,65 @@ template  VerticalPathAggregation<-1, 256>;
 template  VerticalPathAggregation<1, 64>;
 template  VerticalPathAggregation<1, 128>;
 template  VerticalPathAggregation<1, 256>;
+
+
+template<int DIRECTION, unsigned int MAX_DISPARITY>
+inline void HorizontalPathAggregation<DIRECTION, MAX_DISPARITY>::init()
+{
+    if (m_kernel == nullptr)
+    {
+        //reading cl files
+        auto fs = cmrc::ocl_sgm::get_filesystem();
+        auto kernel_inttypes = fs.open("src/ocl/inttypes.cl");
+        auto kernel_utility = fs.open("src/ocl/utility.cl");
+        auto kernel_path_aggregation_common = fs.open("src/ocl/path_aggregation_common.cl");
+        auto kernel_path_aggregation_horizontal = fs.open("src/ocl/path_aggregation_horizontal.cl");
+
+        std::string kernel_src = std::string(kernel_inttypes.begin(), kernel_inttypes.end())
+            + std::string(kernel_utility.begin(), kernel_utility.end())
+            + std::string(kernel_path_aggregation_common.begin(), kernel_path_aggregation_common.end())
+            + std::string(kernel_path_aggregation_horizontal.begin(), kernel_path_aggregation_horizontal.end());
+
+        //Vertical path aggregation templates
+        std::string kernel_max_disparoty = "#define MAX_DISPARITY " + std::to_string(MAX_DISPARITY) + "\n";
+        std::string kernel_direction = "#define DIRECTION " + std::to_string(DIRECTION) + "\n";
+        std::string kernel_DP_BLOCKS_PER_THREAD = "#define DP_BLOCKS_PER_THREAD " + std::to_string(DP_BLOCKS_PER_THREAD) + "\n";
+        kernel_src = std::regex_replace(kernel_src, std::regex("@MAX_DISPARITY@"), kernel_max_disparoty);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@DIRECTION@"), kernel_direction);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@DP_BLOCKS_PER_THREAD@"), kernel_DP_BLOCKS_PER_THREAD);
+
+        static const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
+        //@DP_BLOCK_SIZE@
+        //@SUBGROUP_SIZE@
+        //@SIZE@
+        //@BLOCK_SIZE@
+         //path aggregation common templates
+        std::string kernel_DP_BLOCK_SIZE = "#define DP_BLOCK_SIZE " + std::to_string(DP_BLOCK_SIZE) + "\n";
+        std::string kernel_SUBGROUP_SIZE = "#define SUBGROUP_SIZE " + std::to_string(SUBGROUP_SIZE) + "\n";
+        std::string kernel_BLOCK_SIZE = "#define BLOCK_SIZE " + std::to_string(BLOCK_SIZE) + "\n";
+        std::string kernel_SIZE = "#define SIZE " + std::to_string(SUBGROUP_SIZE) + "\n";
+        kernel_src = std::regex_replace(kernel_src, std::regex("@DP_BLOCK_SIZE@"), kernel_DP_BLOCK_SIZE);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@SUBGROUP_SIZE@"), kernel_SUBGROUP_SIZE);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@SIZE@"), kernel_SIZE);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@BLOCK_SIZE@"), kernel_BLOCK_SIZE);
+
+        std::cout << "horizontal_path_aggregation combined: " << std::endl;
+        std::cout << kernel_src << std::endl;
+
+        m_program.init(m_cl_ctx, m_cl_device, kernel_src);
+        //DEBUG
+        m_kernel = m_program.getKernel("aggregate_horizontal_path_kernel");
+    }
+}
+//down2up
+template  HorizontalPathAggregation<-1, 64>;
+template  HorizontalPathAggregation<-1, 128>;
+template  HorizontalPathAggregation<-1, 256>;
+//up2down
+template  HorizontalPathAggregation<1, 64>;
+template  HorizontalPathAggregation<1, 128>;
+template  HorizontalPathAggregation<1, 256>;
+
 
 }
 }

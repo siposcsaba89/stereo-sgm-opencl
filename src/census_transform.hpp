@@ -6,12 +6,6 @@
 #include <cmrc/cmrc.hpp>
 CMRC_DECLARE(ocl_sgm);
 
-
-#define WINDOW_WIDTH  9
-#define WINDOW_HEIGHT  7
-#define BLOCK_SIZE 128
-#define LINES_PER_BLOCK 16
-
 //for debugging:
 #include <opencv2/opencv.hpp>
 
@@ -23,6 +17,12 @@ namespace cl
 template <typename input_type>
 class CensusTransform
 {
+    static constexpr unsigned int BLOCK_SIZE = 128;
+    static constexpr unsigned int WINDOW_WIDTH = 9;
+    static constexpr unsigned int WINDOW_HEIGHT = 7;
+    static constexpr unsigned int LINES_PER_BLOCK = 16;
+
+
 public:
     CensusTransform(cl_context ctx,
         cl_device_id device);
@@ -94,8 +94,8 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         kernel = std::regex_replace(kernel, px_type_regex, kernel_template_types);
         m_program.init(m_cl_ctx, m_cl_device, kernel);
         //DEBUG
-        std::cout << "libsgm_ocl / census.cl" << std::endl;
-        std::cout << kernel << std::endl;
+        //std::cout << "libsgm_ocl / census.cl" << std::endl;
+        //std::cout << kernel << std::endl;
 
         m_census_kernel = m_program.getKernel("census_transform_kernel");
     }
@@ -126,11 +126,11 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         local_size,
         0, nullptr, nullptr);
     CHECK_OCL_ERROR(err, "Error enequeuing census kernel");
-    clFinish(stream);
-    cv::Mat census(height, width, CV_8UC4);
-    clEnqueueReadBuffer(stream, feature_buffer.data(), true, 0, width * height * 4, census.data, 0, nullptr, nullptr);
-    cv::imshow("census_res", census);
-    cv::waitKey(0);
+    //clFinish(stream);
+    //cv::Mat census(height, width, CV_8UC4);
+    //clEnqueueReadBuffer(stream, feature_buffer.data(), true, 0, width * height * 4, census.data, 0, nullptr, nullptr);
+    //cv::imshow("census_res", census);
+    //cv::waitKey(0);
 }
 
 }
