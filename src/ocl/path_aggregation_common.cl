@@ -39,6 +39,7 @@ void update(DynamicProgramming* dp,
         const unsigned int k = 0;
         const int shfl_prev_idx = max(0, (int)get_local_id(0) - 1);
         const uint32_t prev = shfl_memory[shfl_prev_idx][1];
+        barrier(CLK_LOCAL_MEM_FENCE);
         //#if CUDA_VERSION >= 9000
         //        const uint32_t prev =
         //            __shfl_up_sync(mask, dp[DP_BLOCK_SIZE - 1], 1);
@@ -49,6 +50,7 @@ void update(DynamicProgramming* dp,
         if (lane_id != 0) { out = min(out, prev - dp->last_min + p1); }
         out = min(out, dp->dp[k + 1] - dp->last_min + p1);
         lazy_out = local_min[get_local_id(0)] = out + local_costs[k];
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
     for (unsigned int k = 1; k + 1 < DP_BLOCK_SIZE; ++k)
     {
@@ -66,12 +68,14 @@ void update(DynamicProgramming* dp,
         }
         lazy_out = out + local_costs[k];
         local_min[get_local_id(0)] = min(local_min[get_local_id(0)], lazy_out);
+        barrier(CLK_LOCAL_MEM_FENCE);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
     {
         const unsigned int k = DP_BLOCK_SIZE - 1;
         const int shfl_next_idx = min(BLOCK_SIZE - 1, (int)get_local_id(0) + 1);
         const uint32_t next = shfl_memory[shfl_next_idx][0];
+        barrier(CLK_LOCAL_MEM_FENCE);
         //#if CUDA_VERSION >= 9000
         //        const uint32_t next = __shfl_down_sync(mask, dp0, 1);
         //#else
@@ -86,6 +90,7 @@ void update(DynamicProgramming* dp,
         dp->dp[k - 1] = lazy_out;
         dp->dp[k] = out + local_costs[k];
         dp->dp_shfl[1] = dp->dp[k];
+        barrier(CLK_LOCAL_MEM_FENCE);
         local_min[get_local_id(0)] = min(local_min[get_local_id(0)], dp->dp[k]);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -108,6 +113,6 @@ void update(DynamicProgramming* dp,
 
 unsigned int generate_mask()
 {
-    return (unsigned int)((1ull << SIZE) - 1u);
+    return (unsigned int)((1ul << SIZE) - 1u);
 }
 

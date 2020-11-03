@@ -18,14 +18,72 @@ void store_uint8_vector_8u(global uint8_t* dest, const uint32_t* ptr)
     *dest_ptr = uint32x2;
 }
 
-void store_uint8_vector_16u(global uint8_t* dest,
+void store_uint8_vector(global uint8_t* dest, const int N,
     const uint32_t* ptr)
 {
-    uint4 uint32x4;
-    uint32x4.x = pack_uint8x4(ptr[0], ptr[1], ptr[2], ptr[3]);
-    uint32x4.y = pack_uint8x4(ptr[4], ptr[5], ptr[6], ptr[7]);
-    uint32x4.z = pack_uint8x4(ptr[8], ptr[9], ptr[10], ptr[11]);
-    uint32x4.w = pack_uint8x4(ptr[12], ptr[13], ptr[14], ptr[15]);
-    global uint4* dest_ptr = (global uint4*) dest;
-    *dest_ptr = uint32x4;
+    for (int i = 0; i < N; ++i)
+        dest[i] = (uint8_t)ptr[i];
 }
+
+
+inline void load_uint8_vector(uint32_t* dest, const int num, const local uint8_t* ptr) 
+{
+    for (int  i = 0; i < num; ++i)
+        dest[i] = (uint32_t)(ptr[i]);
+    //barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+
+inline void g_load_uint8_vector(uint32_t* dest, const int num, const global uint8_t* ptr)
+{
+    for (int i = 0; i < num; ++i)
+        dest[i] = (uint32_t)(ptr[i]);
+}
+
+
+inline void lload_uint8_vector(uint32_t* dest, const int num,  const uint8_t* ptr)
+{
+    for (int i = 0; i < num; ++i)
+        dest[i] = (uint32_t)(ptr[i]);
+}
+
+inline void load_uint16_vector(uint32_t* dest, const int num, const local uint16_t* ptr)
+{
+    for (int i = 0; i < num; ++i)
+        dest[i] = (uint32_t)(ptr[i]);
+
+}
+
+
+inline void lload_uint16_vector(uint32_t* dest, const int num, const uint16_t* ptr)
+{
+    for (int i = 0; i < num; ++i)
+        dest[i] = (uint32_t)(ptr[i]);
+}
+
+
+inline void store_uint16_vector(local uint16_t* dest, const int N, const uint32_t* ptr)
+{
+    for (int i = 0; i < N; ++i)
+        dest[i] = (uint16_t)ptr[i];
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+
+inline uint32_t subgroup_min(const uint32_t lane_id,
+    const uint32_t subgroup_size,
+    local uint32_t* shfl_mem)
+{
+    int lid = get_local_id(0);
+    for (int i = subgroup_size / 2; i > 0; i >>= 1)
+    {
+        if (lane_id < i)
+        {
+            shfl_mem[lid] = min(shfl_mem[lid], shfl_mem[lid + i]);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    int sub_group_idx = get_local_id(0) / subgroup_size;
+    return shfl_mem[sub_group_idx * subgroup_size];
+}
+
+

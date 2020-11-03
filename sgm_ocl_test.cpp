@@ -213,10 +213,10 @@ int main(int argc, char* argv[]) {
 
     cl_context cl_ctx;
     cl_device_id cl_device;
-    std::tie(cl_ctx, cl_device) = initCLCTX(0, 0);
+    std::tie(cl_ctx, cl_device) = initCLCTX(1, 0);
 
     int input_depth = 8;
-    int output_depth = 8;
+    const int output_depth = disp_size < 256 ? 8 : 16;
     sgm::cl::Parameters params;
     params.path_type = sgm::cl::PathType::SCAN_8PATH;
     params.subpixel = false;
@@ -277,6 +277,7 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
+        static cv::Mat disp(img_size, CV_16UC1), disp_color, disp_8u;
         //		cv::Mat v_disp(img_size.height, disp_size * 2, CV_32S);
         //		cv::Mat u_disp(disp_size, img_size.width, CV_32S);
         //		cv::Mat cu_disp(img_size, CV_32S);
@@ -289,17 +290,22 @@ int main(int argc, char* argv[]) {
 
         //		ssgm.execute(left.data, right.data, (void**)&d_output_buffer, v_disp.data, v_disp_road.data(), u_disp.data, cu_disp.data,
         //			free_space.data(), free_space_voting_res.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
-        static cv::Mat disp(img_size, CV_16UC1), disp_color, disp_8u;
-        cv::imshow("left", left);
         ssgm.execute(left.data, right.data, reinterpret_cast<uint16_t*>(disp.data));
         std::cout << clock() - st << std::endl;
 
-        disp.convertTo(disp_8u, CV_8U, 255. / disp_size);
-        cv::applyColorMap(disp_8u, disp_color, cv::COLORMAP_JET);
-        //disp_color.setTo(cv::Scalar(0, 0, 0), disp == invalid_disp);
+
+        cv::Mat disparity_8u, disparity_color;
+        disp.convertTo(disparity_8u, CV_8U, 255. / disp_size);
+        cv::applyColorMap(disparity_8u, disparity_color, cv::COLORMAP_JET);
+        const int invalid_disp = output_depth == 8
+            ? static_cast<uint8_t>(ssgm.get_invalid_disparity())
+            : static_cast<uint16_t>(ssgm.get_invalid_disparity());
+        disparity_color.setTo(cv::Scalar(0, 0, 0), disp == invalid_disp);
+        //cv::putText(disparity_color, format_string("sgm execution time: %4.1f[msec] %4.1f[FPS]", 1e-3 * duration, fps),
+        //    cv::Point(50, 50), 2, 0.75, cv::Scalar(255, 255, 255));
 
 
-        cv::imshow("disp", disp_color);
+        cv::imshow("disp", disparity_color);
 
 
         int key = cv::waitKey(1);

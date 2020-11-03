@@ -67,6 +67,7 @@ kernel void census_transform_kernel(
             const int smem_y = (WINDOW_HEIGHT + i) % SMEM_BUFFER_SIZE;
             smem_lines[smem_y][smem_x] = value;
         }
+        barrier(CLK_LOCAL_MEM_FENCE);
 
         if (half_kw <= tid && tid < BLOCK_SIZE_CENSUS - half_kw) {
             // Compute and store

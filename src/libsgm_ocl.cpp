@@ -217,6 +217,7 @@ StereoSGM<input_type>::StereoSGM(int width,
     , m_dst_pitch(dst_pitch)
     , m_cl_ctx(ctx)
     , m_cl_device(cl_device)
+    , m_params(param)
 {
     //create command queue
     initCL();
@@ -290,7 +291,7 @@ void StereoSGM<input_type>::execute(const input_type* left_pixels,
     execute(m_cu_res->d_src_left.data(), m_cu_res->d_src_right.data(), m_cu_res->d_left_disp.data());
 
     err = clEnqueueReadBuffer(m_cl_cmd_queue,
-        m_cu_res->d_left_disp.data(),
+        m_cu_res->d_tmp_left_disp.data(),
         true, // blocking
         0, //offset
         m_dst_pitch * m_height * sizeof(uint16_t),

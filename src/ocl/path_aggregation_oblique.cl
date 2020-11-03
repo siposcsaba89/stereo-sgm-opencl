@@ -2,70 +2,69 @@
 // include utility.cl
 // included common.cl
 
-@DIRECTION@
+@X_DIRECTION@
+@Y_DIRECTION@
 @MAX_DISPARITY@
 #define WARP_SIZE 32
 
-#define feature_type uint32_t
-
 #define PATHS_PER_WARP (WARP_SIZE / SUBGROUP_SIZE)
 #define PATHS_PER_BLOCK (BLOCK_SIZE / SUBGROUP_SIZE)
-#define RIGHT_BUFFER_SIZE (MAX_DISPARITY + PATHS_PER_BLOCK)
-#define RIGHT_BUFFER_ROWS (RIGHT_BUFFER_SIZE / DP_BLOCK_SIZE)
+#define RIGHT_BUFFER_SIZE  (MAX_DISPARITY + PATHS_PER_BLOCK)
+#define RIGHT_BUFFER_ROWS  (RIGHT_BUFFER_SIZE / DP_BLOCK_SIZE)
 
+#define feature_type uint32_t
 
-kernel void aggregate_vertical_path_kernel(
+kernel void aggregate_oblique_path_kernel(
     global uint8_t* dest,
-    global const feature_type* left,
-    global const feature_type* right,
+    const global feature_type* left,
+    const global feature_type* right,
     int width,
     int height,
     unsigned int p1,
     unsigned int p2,
     int min_disp)
 {
-    if (width == 0 || height == 0) {
+    if (width == 0 || height == 0) 
+    {
         return;
     }
 
-    local feature_type right_buffer[2 * DP_BLOCK_SIZE][RIGHT_BUFFER_ROWS + 1];
-    //buffer for shuffle 
+    local feature_type right_buffer[2 * DP_BLOCK_SIZE][RIGHT_BUFFER_ROWS];
     local feature_type shfl_buffer[BLOCK_SIZE][2];
-
     DynamicProgramming dp;
     init(&dp, shfl_buffer[get_local_id(0)]);
+
     const unsigned int warp_id = get_local_id(0) / WARP_SIZE;
     const unsigned int group_id = get_local_id(0) % WARP_SIZE / SUBGROUP_SIZE;
     const unsigned int lane_id = get_local_id(0) % SUBGROUP_SIZE;
-    const unsigned int shfl_mask = 
-        generate_mask() << (group_id * SUBGROUP_SIZE); // SUBGROUP SIZE
+    const unsigned int shfl_mask =
+        generate_mask() << (group_id * SUBGROUP_SIZE);
 
-    const unsigned int x =
+    const int x0 =
         get_group_id(0) * PATHS_PER_BLOCK +
         warp_id * PATHS_PER_WARP +
-        group_id;
-    const unsigned int right_x0 = get_group_id(0) * PATHS_PER_BLOCK;
+        group_id +
+        (X_DIRECTION > 0 ? - (int)(height - 1) : 0);
+    const int right_x00 =
+        get_group_id(0) * PATHS_PER_BLOCK +
+        (X_DIRECTION > 0 ? -(int)(height - 1) : 0);
     const unsigned int dp_offset = lane_id * DP_BLOCK_SIZE;
 
     const unsigned int right0_addr =
-        (right_x0 + PATHS_PER_BLOCK - 1) - x + dp_offset;
+        (unsigned int)(right_x00 + PATHS_PER_BLOCK - 1 - x0) + dp_offset;
     const unsigned int right0_addr_lo = right0_addr % DP_BLOCK_SIZE;
     const unsigned int right0_addr_hi = right0_addr / DP_BLOCK_SIZE;
 
-    for (unsigned int iter = 0; iter < height; ++iter)
+    for (unsigned int iter = 0; iter < height; ++iter) 
     {
-        const unsigned int y = (DIRECTION > 0 ? iter : height - 1 - iter);
-        // Load left to register
-        feature_type left_value;
-        if (x < width)
-        {
-            left_value = left[x + y * width];
-        }
+        const int y = (int)(Y_DIRECTION > 0 ? iter : height - 1 - iter);
+        const int x = x0 + (int)(iter) * X_DIRECTION;
+        const int right_x0 = right_x00 + (int)(iter) * X_DIRECTION;
         // Load right to smem
-        for (unsigned int i0 = 0; i0 < RIGHT_BUFFER_SIZE; i0 += BLOCK_SIZE)
+        for (unsigned int i0 = 0; i0 < RIGHT_BUFFER_SIZE; i0 += BLOCK_SIZE) 
         {
             const unsigned int i = i0 + get_local_id(0);
-            if (i < RIGHT_BUFFER_SIZE)
+            if (i < RIGHT_BUFFER_SIZE) 
             {
                 const int right_x = (int)(right_x0 + PATHS_PER_BLOCK - 1 - i - min_disp);
                 feature_type right_value = 0;
@@ -76,7 +75,7 @@ kernel void aggregate_vertical_path_kernel(
                 const unsigned int lo = i % DP_BLOCK_SIZE;
                 const unsigned int hi = i / DP_BLOCK_SIZE;
                 right_buffer[lo][hi] = right_value;
-                if (hi > 0)
+                if (hi > 0) 
                 {
                     right_buffer[lo + DP_BLOCK_SIZE][hi - 1] = right_value;
                 }
@@ -84,8 +83,9 @@ kernel void aggregate_vertical_path_kernel(
         }
         barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
         // Compute
-        if (x < width)
+        if (0 <= x && x < (int)(width))
         {
+            const feature_type left_value = left[x + y * width];
             feature_type right_values[DP_BLOCK_SIZE];
             for (unsigned int j = 0; j < DP_BLOCK_SIZE; ++j)
             {
@@ -101,6 +101,6 @@ kernel void aggregate_vertical_path_kernel(
                 &dest[dp_offset + x * MAX_DISPARITY + y * MAX_DISPARITY * width], DP_BLOCK_SIZE,
                 dp.dp);
         }
-        barrier(CLK_LOCAL_MEM_FENCE |CLK_GLOBAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
     }
 }

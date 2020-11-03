@@ -158,17 +158,85 @@ struct HorizontalPathAggregation
             global_size,
             local_size,
             0, nullptr, nullptr);
-        cl_int errr = clFinish(stream);
-        CHECK_OCL_ERROR(err, "Error finishing queue");
-        cv::Mat debug(height, width, CV_8UC4);
-        clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
-        cv::imshow("horizontal path aggregation debug", debug);
-        cv::waitKey(0);
+        //cl_int errr = clFinish(stream);
+        //CHECK_OCL_ERROR(err, "Error finishing queue");
+        //cv::Mat debug(height, width, CV_8UC4);
+        //clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
+        //cv::imshow("horizontal path aggregation debug", debug);
+        //cv::waitKey(0);
     }
 
     void init();
 
 };
+
+
+template <int X_DIRECTION, int Y_DIRECTION, unsigned int MAX_DISPARITY>
+struct ObliquePathAggregation
+{
+    static constexpr unsigned int WARP_SIZE = 32;
+    static constexpr unsigned int DP_BLOCK_SIZE = 16u;
+    static constexpr unsigned int BLOCK_SIZE = WARP_SIZE * 8u;
+
+    ObliquePathAggregation(cl_context ctx, cl_device_id device)
+        : m_cl_ctx(ctx)
+        , m_cl_device(device)
+    {
+    }
+    DeviceProgram m_program;
+    cl_context m_cl_ctx = nullptr;
+    cl_device_id m_cl_device = nullptr;
+    cl_kernel m_kernel = nullptr;
+    void enqueue(DeviceBuffer<cost_type>& dest,
+        const DeviceBuffer<feature_type>& left,
+        const DeviceBuffer<feature_type>& right,
+        int width,
+        int height,
+        unsigned int p1,
+        unsigned int p2,
+        int min_disp,
+        cl_command_queue stream)
+    {
+        if (!m_kernel)
+            init();
+
+        cl_int err;
+        err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
+        err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
+        err = clSetKernelArg(m_kernel, 2, sizeof(cl_mem), &right.data());
+        err = clSetKernelArg(m_kernel, 3, sizeof(width), &width);
+        err = clSetKernelArg(m_kernel, 4, sizeof(height), &height);
+        err = clSetKernelArg(m_kernel, 5, sizeof(p1), &p1);
+        err = clSetKernelArg(m_kernel, 6, sizeof(p2), &p2);
+        err = clSetKernelArg(m_kernel, 7, sizeof(min_disp), &min_disp);
+
+        static const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
+        static const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE / SUBGROUP_SIZE;
+
+        const unsigned gdim = (width + height + PATHS_PER_BLOCK - 2) / PATHS_PER_BLOCK;
+        const unsigned bdim = BLOCK_SIZE;
+        //
+        size_t global_size[1] = { gdim * bdim };
+        size_t local_size[1] = { bdim };
+        err = clEnqueueNDRangeKernel(stream,
+            m_kernel,
+            1,
+            nullptr,
+            global_size,
+            local_size,
+            0, nullptr, nullptr);
+        //cl_int errr = clFinish(stream);
+        //CHECK_OCL_ERROR(err, "Error finishing queue");
+        //cv::Mat debug(height, width, CV_8UC4);
+        //clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
+        //cv::imshow("horizontal path aggregation debug", debug);
+        //cv::waitKey(0);
+    }
+
+    void init();
+
+};
+
 
 
 template <size_t MAX_DISPARITY>
@@ -205,7 +273,11 @@ private:
     VerticalPathAggregation<1, MAX_DISPARITY> m_up2down;
     HorizontalPathAggregation<-1, MAX_DISPARITY> m_right2left;
     HorizontalPathAggregation<1, MAX_DISPARITY> m_left2right;
-
+    ObliquePathAggregation<1, 1, MAX_DISPARITY> m_upleft2downright;
+    ObliquePathAggregation<-1, 1, MAX_DISPARITY> m_upright2downleft;
+    ObliquePathAggregation<-1, -1, MAX_DISPARITY> m_downright2upleft;
+    ObliquePathAggregation<1, -1, MAX_DISPARITY> m_downleft2upright;
+    
 };
 
 }

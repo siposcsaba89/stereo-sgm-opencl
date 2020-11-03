@@ -110,6 +110,7 @@ kernel void aggregate_horizontal_path_kernel(
                     }
                     const int shfl_prev_idx = max(0, (int)get_local_id(0) - 1);
                     right_buffer[j][0] = shfl_buffer_local[shfl_prev_idx];
+                    barrier(CLK_LOCAL_MEM_FENCE);
 //#if CUDA_VERSION >= 9000
 //                    right_buffer[j][0] = __shfl_up_sync(shfl_mask, t, 1, SUBGROUP_SIZE);
 //#else
@@ -131,6 +132,7 @@ kernel void aggregate_horizontal_path_kernel(
                     //Maybe it is not necessary
                     const int shfl_next_idx = min(BLOCK_SIZE - 1, (int)get_local_id(0) + 1);
                     right_buffer[j][DP_BLOCK_SIZE - 1] = shfl_buffer_local[shfl_next_idx];
+                    barrier(CLK_LOCAL_MEM_FENCE);
                     //#if CUDA_VERSION >= 9000
 //                    right_buffer[j][DP_BLOCK_SIZE - 1] =
 //                        __shfl_down_sync(shfl_mask, t, 1, SUBGROUP_SIZE);

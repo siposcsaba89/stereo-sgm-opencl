@@ -18,6 +18,8 @@ set(OCL_FILES
     src/ocl/path_aggregation_common.cl
     src/ocl/path_aggregation_vertical.cl
     src/ocl/path_aggregation_horizontal.cl
+    src/ocl/path_aggregation_oblique.cl
+    src/ocl/winner_takes_all.cl
 )
 
 cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})
@@ -34,6 +36,8 @@ set(LIBSGM_SRCS
     src/sgm.cpp
     src/device_buffer.hpp
     src/device_kernel.h
+    src/winner_takes_all.hpp
+    src/winner_takes_all.cpp
 )
 
 set(LIBSGM_PUBLIC_HDRS
