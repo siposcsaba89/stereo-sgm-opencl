@@ -58,7 +58,11 @@ inline CensusTransform<input_type>::CensusTransform(cl_context ctx,
 template<typename input_type>
 inline CensusTransform<input_type>::~CensusTransform()
 {
-    clReleaseKernel(m_census_kernel);
+    if (m_census_kernel)
+    {
+        clReleaseKernel(m_census_kernel);
+        m_census_kernel = nullptr;
+    }
 }
 
 template<typename input_type>
@@ -75,7 +79,7 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
 
         if (std::is_same<input_type, uint16_t>::value)
         {
-            kernel_template_types = "#define pixel_type uint8_t\n";
+            kernel_template_types = "#define pixel_type uint16_t\n";
         }
         else if (std::is_same<input_type, uint8_t>::value)
         {

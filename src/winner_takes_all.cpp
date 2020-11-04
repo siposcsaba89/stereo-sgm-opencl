@@ -81,15 +81,17 @@ void WinnerTakesAll<MAX_DISPARITY>::enqueue(DeviceBuffer<uint16_t>& left,
         std::string kernel_COMPUTE_SUBPIXEL = "#define COMPUTE_SUBPIXEL " + std::to_string(subpixel ? 1 : 0) + "\n";
         std::string kernel_WARPS_PER_BLOCK = "#define WARPS_PER_BLOCK " + std::to_string(WARPS_PER_BLOCK) + "\n";
         std::string kernel_BLOCK_SIZE = "#define BLOCK_SIZE " + std::to_string(BLOCK_SIZE) + "\n";
+        std::string kernel_SUBPIXEL_SHIFT = "#define SUBPIXEL_SHIFT " + std::to_string(SubpixelShift()) + "\n";
         kernel_src = std::regex_replace(kernel_src, std::regex("@MAX_DISPARITY@"), kernel_max_disparoty);
         kernel_src = std::regex_replace(kernel_src, std::regex("@NUM_PATHS@"), kernel_NUM_PATHS);
         kernel_src = std::regex_replace(kernel_src, std::regex("@COMPUTE_SUBPIXEL@"), kernel_COMPUTE_SUBPIXEL);
         kernel_src = std::regex_replace(kernel_src, std::regex("@WARPS_PER_BLOCK@"), kernel_WARPS_PER_BLOCK);
         kernel_src = std::regex_replace(kernel_src, std::regex("@BLOCK_SIZE@"), kernel_BLOCK_SIZE);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@SUBPIXEL_SHIFT@"), kernel_SUBPIXEL_SHIFT);
 
         m_program.init(m_cl_context, m_cl_device_id,kernel_src);
         //DEBUG
-        std::cout << kernel_src << std::endl;
+        //std::cout << kernel_src << std::endl;
 
         m_kernel = m_program.getKernel("winner_takes_all_kernel");
     }

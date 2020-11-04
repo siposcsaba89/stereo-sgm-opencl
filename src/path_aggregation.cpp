@@ -27,6 +27,14 @@ PathAggregation<MAX_DISPARITY>::PathAggregation(cl_context ctx, cl_device_id dev
 template<size_t MAX_DISPARITY>
 PathAggregation<MAX_DISPARITY>::~PathAggregation()
 {
+    for (int i = 0; i < MAX_NUM_PATHS; ++i)
+    {
+        if (m_streams[i])
+        {
+            clReleaseCommandQueue(m_streams[i]);
+            m_streams[i] = nullptr;
+        }
+    }
 }
 
 template<size_t MAX_DISPARITY>
@@ -69,7 +77,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
 
     cl_int err = clFinish(stream);
     CHECK_OCL_ERROR(err, "Error finishing queue");
-    m_up2down.enqueue_aggregate_up2down_path(
+    m_up2down.enqueue(
         m_sub_buffers[0],
         left,
         right,
@@ -80,7 +88,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         min_disp,
         m_streams[0]
     );
-    m_down2up.enqueue_aggregate_up2down_path(
+    m_down2up.enqueue(
         m_sub_buffers[1],
         left,
         right,

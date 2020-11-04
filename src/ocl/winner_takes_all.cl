@@ -5,6 +5,8 @@
 @COMPUTE_SUBPIXEL@
 @WARPS_PER_BLOCK@
 @BLOCK_SIZE@
+@SUBPIXEL_SHIFT@
+
 
 #define WARP_SIZE 32
 #define ACCUMULATION_PER_THREAD 16u
@@ -34,9 +36,24 @@ inline int unpack_index(uint32_t packed)
     return packed & 0xffffu;
 }
 
-inline uint32_t compute_disparity_normal(uint32_t disp, uint32_t cost, local uint16_t* smem )
+inline uint32_t compute_disparity_normal(uint32_t disp, uint32_t cost, const local uint16_t* smem )
 {
     return disp;
+}
+
+inline uint32_t compute_disparity_subpixel(uint32_t disp, uint32_t cost, const local uint16_t* smem)
+{
+    int subp = disp;
+    subp <<= SUBPIXEL_SHIFT;
+    if (disp > 0 && disp < MAX_DISPARITY - 1)
+    {
+        const int left = smem[disp - 1];
+        const int right = smem[disp + 1];
+        const int numer = left - right;
+        const int denom = left - 2 * cost + right;
+        subp += ((numer << SUBPIXEL_SHIFT) + denom) / (2 * denom);
+    }
+    return subp;
 }
 
 kernel void winner_takes_all_kernel(
@@ -188,9 +205,15 @@ kernel void winner_takes_all_kernel(
                 //uniq = true;
                 if (lane_id == 0) 
                 {
-                    //left_dest[x] = uniq ? compute_disparity(bestDisp, bestCost, smem_cost_sum[warp_id][smem_x]) : INVALID_DISP;
-                    left_dest[x] = uniq ? compute_disparity_normal(bestDisp, bestCost, smem_cost_sum[warp_id][smem_x])
-                        : INVALID_DISP;
+                    if (uniq)
+                    {
+                        if (COMPUTE_SUBPIXEL == 1)
+                            left_dest[x] = compute_disparity_subpixel(bestDisp, bestCost, smem_cost_sum[warp_id][smem_x]);
+                        else
+                            left_dest[x] = compute_disparity_normal(bestDisp, bestCost, smem_cost_sum[warp_id][smem_x]);
+                    }
+                    else
+                        left_dest[x] = INVALID_DISP;
                 }
             }
         }

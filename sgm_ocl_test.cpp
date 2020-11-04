@@ -215,11 +215,11 @@ int main(int argc, char* argv[]) {
     cl_device_id cl_device;
     std::tie(cl_ctx, cl_device) = initCLCTX(1, 0);
 
-    int input_depth = 8;
-    const int output_depth = disp_size < 256 ? 8 : 16;
     sgm::cl::Parameters params;
+    int input_depth = 8;
+    params.subpixel = true;
+    const int output_depth = (disp_size == 256 || params.subpixel) ? 16 : 8;
     params.path_type = sgm::cl::PathType::SCAN_8PATH;
-    params.subpixel = false;
     params.uniqueness = 0.95f;
 
     sgm::cl::StereoSGM<uint8_t> ssgm(width,
@@ -295,7 +295,7 @@ int main(int argc, char* argv[]) {
 
 
         cv::Mat disparity_8u, disparity_color;
-        disp.convertTo(disparity_8u, CV_8U, 255. / disp_size);
+        disp.convertTo(disparity_8u, CV_8U, 255. / (disp_size * 16));
         cv::applyColorMap(disparity_8u, disparity_color, cv::COLORMAP_JET);
         const int invalid_disp = output_depth == 8
             ? static_cast<uint8_t>(ssgm.get_invalid_disparity())

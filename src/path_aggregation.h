@@ -15,7 +15,6 @@ limitations under the License.
 */
 
 #pragma once
-//#include ""
 #include "device_buffer.hpp"
 #include "libsgm_ocl/types.h"
 #include "device_kernel.h"
@@ -43,11 +42,20 @@ struct VerticalPathAggregation
         , m_cl_device(device)
     {
     }
+    ~VerticalPathAggregation()
+    {
+        if (m_kernel)
+        {
+            clReleaseKernel(m_kernel);
+            m_kernel = nullptr;
+        }
+    }
+
     DeviceProgram m_program;
     cl_context m_cl_ctx = nullptr;
     cl_device_id m_cl_device = nullptr;
     cl_kernel m_kernel = nullptr;
-    void enqueue_aggregate_up2down_path(DeviceBuffer<cost_type> & dest,
+    void enqueue(DeviceBuffer<cost_type> & dest,
         const DeviceBuffer<feature_type> & left,
         const DeviceBuffer<feature_type> & right,
         int width,
@@ -113,6 +121,14 @@ struct HorizontalPathAggregation
         : m_cl_ctx(ctx)
         , m_cl_device(device)
     {
+    }
+    ~HorizontalPathAggregation()
+    {
+        if (m_kernel)
+        {
+            clReleaseKernel(m_kernel);
+            m_kernel = nullptr;
+        }
     }
     DeviceProgram m_program;
     cl_context m_cl_ctx = nullptr;
@@ -183,6 +199,14 @@ struct ObliquePathAggregation
         , m_cl_device(device)
     {
     }
+    ~ObliquePathAggregation()
+    {
+        if (m_kernel)
+        {
+            clReleaseKernel(m_kernel);
+            m_kernel = nullptr;
+        }
+    }
     DeviceProgram m_program;
     cl_context m_cl_ctx = nullptr;
     cl_device_id m_cl_device = nullptr;
@@ -236,8 +260,6 @@ struct ObliquePathAggregation
     void init();
 
 };
-
-
 
 template <size_t MAX_DISPARITY>
 class PathAggregation 

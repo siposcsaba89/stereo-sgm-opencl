@@ -20,6 +20,9 @@ set(OCL_FILES
     src/ocl/path_aggregation_horizontal.cl
     src/ocl/path_aggregation_oblique.cl
     src/ocl/winner_takes_all.cl
+    src/ocl/check_consistency.cl
+    src/ocl/median_filter.cl
+    src/ocl/correct_disparity_range.cl
 )
 
 cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})
@@ -27,7 +30,6 @@ cmrc_add_resource_library(rc_ocl_sgm NAMESPACE "ocl_sgm" ${OCL_FILES})
 set(LIBSGM_SRCS
     src/census_transform.hpp
     src/path_aggregation.h
-    src/path_aggregation_vertical.h
     src/census.cpp
     src/libsgm_ocl.cpp
     src/path_aggregation.cpp
@@ -38,6 +40,8 @@ set(LIBSGM_SRCS
     src/device_kernel.h
     src/winner_takes_all.hpp
     src/winner_takes_all.cpp
+    src/sgm_details.h
+    src/sgm_details.cpp
 )
 
 set(LIBSGM_PUBLIC_HDRS

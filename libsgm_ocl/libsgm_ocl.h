@@ -1,17 +1,23 @@
 #pragma once
-
 #include <CL/cl.h>
 #include <inttypes.h>
 #include "libsgm_ocl/types.h"
-
-// pixel and feature type defs
-#define pixel_type uint8_t
-
+#include <memory>
 
 namespace sgm
 {
 namespace cl
 {
+
+constexpr int SubpixelShift()
+{
+    return 4;
+}
+constexpr int SubpixelScale()
+{
+    return (1 << SubpixelShift());
+}
+
 template <typename input_type>
 struct CudaStereoSGMResources;
 
@@ -142,7 +148,7 @@ private:
     StereoSGM(const StereoSGM&) = delete;
     StereoSGM& operator=(const StereoSGM&) = delete;
 
-    CudaStereoSGMResources<input_type>* m_cu_res = nullptr;
+    std::unique_ptr<CudaStereoSGMResources<input_type>> m_cu_res;
 
     int m_width = -1;
     int m_height = -1;
