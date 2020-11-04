@@ -50,7 +50,7 @@ set(LIBSGM_PUBLIC_HDRS
 )
 
 add_library(libsgm_ocl ${LIBSGM_SRCS} ${LIBSGM_PUBLIC_HDRS} ${OCL_FILES})
-add_library(::libsgm_ocl ALIAS libsgm_ocl)
+add_library(libsgm_ocl::libsgm_ocl ALIAS libsgm_ocl)
 source_group(ocl FILES ${OCL_FILES})
 source_group(libsgm_ocl FILES ${LIBSGM_PUBLIC_HDRS})
 
@@ -89,13 +89,15 @@ install(FILES
     DESTINATION 
         lib/cmake/${PROJECT_NAME})
     
-install(EXPORT ${PROJECT_NAME}-targets NAMESPACE :: DESTINATION lib/cmake/${PROJECT_NAME})
+install(EXPORT ${PROJECT_NAME}-targets NAMESPACE libsgm_ocl:: DESTINATION lib/cmake/${PROJECT_NAME})
 
 install(FILES ${LIBSGM_PUBLIC_HDRS} DESTINATION include/libsgm_ocl/libsgm_ocl)
 
 
 if (BUILD_EXAMPLES)
     find_package(OpenCV REQUIRED)
-    add_executable(sgm-ocl-test sgm_ocl_test.cpp)
-    target_link_libraries(sgm-ocl-test PRIVATE ::libsgm_ocl ${OpenCV_LIBRARIES})
+    add_executable(sgm-ocl-test examples/sgm_ocl_test.cpp)
+    target_link_libraries(sgm-ocl-test PRIVATE libsgm_ocl::libsgm_ocl ${OpenCV_LIBRARIES})
+    add_executable(stereo_movie examples/stereo_movie.cpp)
+    target_link_libraries(stereo_movie PRIVATE libsgm_ocl::libsgm_ocl ${OpenCV_LIBRARIES})
 endif()

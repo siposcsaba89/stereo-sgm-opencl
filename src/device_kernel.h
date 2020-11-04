@@ -43,7 +43,8 @@ public:
             build_log_size,
             &build_log[0],
             nullptr);
-        std::cout << "OpenCL build info: " << build_log << std::endl;
+        if (build_log.size() > 10)
+            std::cout << "OpenCL build info: " << build_log << std::endl;
         if (err != CL_SUCCESS)
         {
             throw std::runtime_error("Cannot build ocl program!");
