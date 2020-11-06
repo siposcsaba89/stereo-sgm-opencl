@@ -1,4 +1,6 @@
 #include "path_aggregation.h"
+//debugging
+#include <opencv2/opencv.hpp>
 
 namespace sgm 
 {
@@ -83,7 +85,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         right,
         width,
         height,
-        p2,
+        p1,
         p2,
         min_disp,
         m_streams[0]
@@ -94,7 +96,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         right,
         width,
         height,
-        p2,
+        p1,
         p2,
         min_disp,
         m_streams[1]
@@ -105,7 +107,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         right,
         width,
         height,
-        p2,
+        p1,
         p2,
         min_disp,
         m_streams[2]
@@ -116,7 +118,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         right,
         width,
         height,
-        p2,
+        p1,
         p2,
         min_disp,
         m_streams[3]
@@ -129,7 +131,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             right,
             width,
             height,
-            p2,
+            p1,
             p2,
             min_disp,
             m_streams[4]
@@ -140,7 +142,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             right,
             width,
             height,
-            p2,
+            p1,
             p2,
             min_disp,
             m_streams[5]
@@ -151,18 +153,39 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             right,
             width,
             height,
-            p2,
+            p1,
             p2,
             min_disp,
             m_streams[6]
         );
+        {
+            int path_id = 6;
+            clFinish(m_streams[path_id]);
+
+            cl_buffer_region region = { buffer_step * path_id + width * height * 1, width * height };
+            cl_mem buff = clCreateSubBuffer(m_cost_buffer.data(),
+                CL_MEM_READ_WRITE,
+                CL_BUFFER_CREATE_TYPE_REGION,
+                &region, &err);
+
+
+            cv::Mat cost(height, width, CV_8UC1);
+            clEnqueueReadBuffer(stream, buff, true, 0, width * height * 1, cost.data, 0, nullptr, nullptr);
+            {
+                cv::FileStorage img_out("debug_cost_ocl.txt", cv::FileStorage::WRITE);
+                img_out << "mat" << cost;
+            }
+            //cv::imwrite("debug_cost_ocl.tiff", cost);
+            cv::imshow("cost_res_ocl", cost);
+            cv::waitKey(0);
+        }
         m_downleft2upright.enqueue(
             m_sub_buffers[7],
             left,
             right,
             width,
             height,
-            p2,
+            p1,
             p2,
             min_disp,
             m_streams[7]

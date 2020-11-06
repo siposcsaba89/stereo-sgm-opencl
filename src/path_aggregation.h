@@ -23,8 +23,6 @@ limitations under the License.
 #include <cmrc/cmrc.hpp>
 CMRC_DECLARE(ocl_sgm);
 
-#include <opencv2/opencv.hpp>
-
 namespace sgm
 {
 namespace cl

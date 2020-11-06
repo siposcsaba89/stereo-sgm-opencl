@@ -30,9 +30,9 @@ kernel void aggregate_oblique_path_kernel(
     }
 
     local feature_type right_buffer[2 * DP_BLOCK_SIZE][RIGHT_BUFFER_ROWS];
-    local feature_type shfl_buffer[BLOCK_SIZE][2];
+    local feature_type shfl_buffer[BLOCK_SIZE];
     DynamicProgramming dp;
-    init(&dp, shfl_buffer[get_local_id(0)]);
+    init(&dp, shfl_buffer);
 
     const unsigned int warp_id = get_local_id(0) / WARP_SIZE;
     const unsigned int group_id = get_local_id(0) % WARP_SIZE / SUBGROUP_SIZE;

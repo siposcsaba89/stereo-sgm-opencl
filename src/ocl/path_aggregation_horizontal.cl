@@ -30,14 +30,14 @@ kernel void aggregate_horizontal_path_kernel(
     }
 
     feature_type right_buffer[DP_BLOCKS_PER_THREAD][DP_BLOCK_SIZE];
-    local feature_type shfl_buffer[BLOCK_SIZE][2];
+    local feature_type shfl_buffer[BLOCK_SIZE];
     local feature_type shfl_buffer_local[BLOCK_SIZE];
 
     DynamicProgramming dp[DP_BLOCKS_PER_THREAD];
     //TODO : works until DP_BLOCKS_PER_THREAD is 1
     for (int i = 0; i < DP_BLOCKS_PER_THREAD; ++i)
     {
-        init(&dp[i], shfl_buffer[get_local_id(0)]);
+        init(&dp[i], shfl_buffer);
     }
 
     const unsigned int warp_id = get_local_id(0) / WARP_SIZE;

@@ -6,9 +6,6 @@
 #include <cmrc/cmrc.hpp>
 CMRC_DECLARE(ocl_sgm);
 
-//for debugging:
-#include <opencv2/opencv.hpp>
-
 namespace sgm
 {
 namespace cl
@@ -97,9 +94,6 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         std::regex px_type_regex("@pixel_type@");
         kernel = std::regex_replace(kernel, px_type_regex, kernel_template_types);
         m_program.init(m_cl_ctx, m_cl_device, kernel);
-        //DEBUG
-        //std::cout << "libsgm_ocl / census.cl" << std::endl;
-        //std::cout << kernel << std::endl;
 
         m_census_kernel = m_program.getKernel("census_transform_kernel");
     }
@@ -130,11 +124,6 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         local_size,
         0, nullptr, nullptr);
     CHECK_OCL_ERROR(err, "Error enequeuing census kernel");
-    //clFinish(stream);
-    //cv::Mat census(height, width, CV_8UC4);
-    //clEnqueueReadBuffer(stream, feature_buffer.data(), true, 0, width * height * 4, census.data, 0, nullptr, nullptr);
-    //cv::imshow("census_res", census);
-    //cv::waitKey(0);
 }
 
 }
