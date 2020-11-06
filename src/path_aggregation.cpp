@@ -1,7 +1,7 @@
 #include "path_aggregation.h"
 //debugging
 #include <opencv2/opencv.hpp>
-
+#include <fstream>
 namespace sgm 
 {
 namespace cl
@@ -123,8 +123,20 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         min_disp,
         m_streams[3]
     );
+
     if (path_type == PathType::SCAN_8PATH)
     {
+
+        //{
+        //    clFinish(stream);
+        //    cv::Mat cost(height, width, CV_8UC4);
+        //    clEnqueueReadBuffer(stream, right.data(), true, 0, width * height * 4, cost.data, 0, nullptr, nullptr);
+        //    cv::imwrite("debug_cost_ocl.tiff", cost);
+        //    cv::imshow("cost_res_ocl", cost);
+        //    cv::waitKey(0);
+        //}
+
+
         m_upleft2downright.enqueue(
             m_sub_buffers[4],
             left,
@@ -136,6 +148,36 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             min_disp,
             m_streams[4]
         );
+        //{
+        //    int path_id = 4;
+        //    clFinish(m_streams[path_id]);
+        //
+        //    cl_buffer_region region = { buffer_step * path_id + width * height * 0, width * height };
+        //    cl_mem buff = clCreateSubBuffer(m_cost_buffer.data(),
+        //        CL_MEM_READ_WRITE,
+        //        CL_BUFFER_CREATE_TYPE_REGION,
+        //        &region, &err);
+        //
+        //
+        //    cv::Mat cost(height, width, CV_8UC1);
+        //    clEnqueueReadBuffer(stream, buff, true, 0, width * height * 1, cost.data, 0, nullptr, nullptr);
+        //    {
+        //        std::ofstream mat_txt("debug_cost_ocl.txt");
+        //        for (int j = 0; j < cost.rows; ++j)
+        //        {
+        //            for (int i = 0; i < cost.cols; ++i)
+        //            {
+        //                mat_txt << static_cast<int>(cost.at<uint8_t>(j, i)) << " ";
+        //            }
+        //            mat_txt << std::endl;
+        //        }
+        //        mat_txt.close();
+        //    }
+        //    //cv::imwrite("debug_cost_ocl.tiff", cost);
+        //    cv::imshow("cost_res_ocl", cost);
+        //    cv::waitKey(0);
+        //}
+
         m_upright2downleft.enqueue(
             m_sub_buffers[5],
             left,
@@ -158,27 +200,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             min_disp,
             m_streams[6]
         );
-        {
-            int path_id = 6;
-            clFinish(m_streams[path_id]);
 
-            cl_buffer_region region = { buffer_step * path_id + width * height * 1, width * height };
-            cl_mem buff = clCreateSubBuffer(m_cost_buffer.data(),
-                CL_MEM_READ_WRITE,
-                CL_BUFFER_CREATE_TYPE_REGION,
-                &region, &err);
-
-
-            cv::Mat cost(height, width, CV_8UC1);
-            clEnqueueReadBuffer(stream, buff, true, 0, width * height * 1, cost.data, 0, nullptr, nullptr);
-            {
-                cv::FileStorage img_out("debug_cost_ocl.txt", cv::FileStorage::WRITE);
-                img_out << "mat" << cost;
-            }
-            //cv::imwrite("debug_cost_ocl.tiff", cost);
-            cv::imshow("cost_res_ocl", cost);
-            cv::waitKey(0);
-        }
         m_downleft2upright.enqueue(
             m_sub_buffers[7],
             left,

@@ -82,7 +82,7 @@ kernel void aggregate_vertical_path_kernel(
                 }
             }
         }
-        barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+        barrier(CLK_LOCAL_MEM_FENCE);
         // Compute
         if (x < width)
         {
@@ -101,6 +101,6 @@ kernel void aggregate_vertical_path_kernel(
                 &dest[dp_offset + x * MAX_DISPARITY + y * MAX_DISPARITY * width], DP_BLOCK_SIZE,
                 dp.dp);
         }
-        barrier(CLK_LOCAL_MEM_FENCE |CLK_GLOBAL_MEM_FENCE);
+        //barrier(CLK_LOCAL_MEM_FENCE);
     }
 }

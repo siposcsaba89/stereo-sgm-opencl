@@ -13,8 +13,8 @@ void init(DynamicProgramming* dp, local uint32_t* dp_local)
 {
     dp->last_min = 0;
     for (unsigned int i = 0; i < DP_BLOCK_SIZE; ++i) { dp->dp[i] = 0; }
-    dp_local[get_local_id(0)] = 0;
-    barrier(CLK_LOCAL_MEM_FENCE);
+    //dp_local[get_local_id(0)] = 0;
+    //barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 void update(DynamicProgramming* dp,
@@ -38,7 +38,7 @@ void update(DynamicProgramming* dp,
         shfl_memory[get_local_id(0)] = dp->dp[DP_BLOCK_SIZE - 1];
         barrier(CLK_LOCAL_MEM_FENCE);
         const uint32_t prev = shfl_memory[shfl_prev_idx];
-        barrier(CLK_LOCAL_MEM_FENCE);
+        //barrier(CLK_LOCAL_MEM_FENCE);
         //#if CUDA_VERSION >= 9000
         //        const uint32_t prev =
         //            __shfl_up_sync(mask, dp[DP_BLOCK_SIZE - 1], 1);
@@ -65,7 +65,7 @@ void update(DynamicProgramming* dp,
         const unsigned int k = DP_BLOCK_SIZE - 1;
         const int shfl_next_idx = min(BLOCK_SIZE - 1, (int)get_local_id(0) + 1);
         const uint32_t next = shfl_memory[shfl_next_idx];
-        barrier(CLK_LOCAL_MEM_FENCE);
+        //barrier(CLK_LOCAL_MEM_FENCE);
         //#if CUDA_VERSION >= 9000
         //        const uint32_t next = __shfl_down_sync(mask, dp0, 1);
         //#else
@@ -96,7 +96,7 @@ void update(DynamicProgramming* dp,
     int sub_group_idx = get_local_id(0) / SUBGROUP_SIZE;
     dp->last_min = local_min_shared[sub_group_idx * SUBGROUP_SIZE];
     //dp->last_min = subgroup_min<SUBGROUP_SIZE>(local_min, mask);
-    barrier(CLK_LOCAL_MEM_FENCE);
+    //barrier(CLK_LOCAL_MEM_FENCE);
 }
 
 

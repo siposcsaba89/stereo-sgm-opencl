@@ -128,6 +128,7 @@ void WinnerTakesAll<MAX_DISPARITY>::enqueue(DeviceBuffer<uint16_t>& left,
     //clFinish(stream);
     //cv::Mat debug(height, width, CV_16UC1);
     //clEnqueueReadBuffer(stream, left.data(), true, 0, width * height * 2, debug.data, 0, nullptr, nullptr);
+    //cv::imwrite("winn_takes_all.tiff", debug);
     //cv::imshow("winner takes all debug", debug * 2048);
     //cv::waitKey(0);
 }

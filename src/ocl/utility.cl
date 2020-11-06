@@ -21,13 +21,37 @@ void store_uint8_vector_8u(global uint8_t* dest, const uint32_t* ptr)
 void store_uint8_vector(global uint8_t* dest, const int N,
     const uint32_t* ptr)
 {
-    for (int i = 0; i < N; ++i)
-        dest[i] = (uint8_t)ptr[i];
+    if (N == 16)
+    {
+        uchar16 vv;
+        uchar* v = (uchar*)&vv;
+#pragma unroll
+        for (int i = 0; i < 16; ++i)
+            v[i] = (uint8_t)ptr[i];
+        *((global uchar16*)dest) = vv;
+    }
+    else if (N == 8)
+    {
+        uchar8 vv;
+        uchar* v = (uchar*)&vv;
+#pragma unroll
+        for (int i = 0; i < 8; ++i)
+            v[i] = (uint8_t)ptr[i];
+        *((global uchar8*)dest) = vv;
+
+    }
+    else
+    {
+#pragma unroll
+        for (int i = 0; i < N; ++i)
+            dest[i] = (uint8_t)ptr[i];
+    }
 }
 
 
 inline void load_uint8_vector(uint32_t* dest, const int num, const local uint8_t* ptr) 
 {
+#pragma unroll
     for (int  i = 0; i < num; ++i)
         dest[i] = (uint32_t)(ptr[i]);
     //barrier(CLK_LOCAL_MEM_FENCE);
@@ -36,8 +60,28 @@ inline void load_uint8_vector(uint32_t* dest, const int num, const local uint8_t
 
 inline void g_load_uint8_vector(uint32_t* dest, const int num, const global uint8_t* ptr)
 {
-    for (int i = 0; i < num; ++i)
-        dest[i] = (uint32_t)(ptr[i]);
+    if (num == 16)
+    {
+        uchar16 vv = *((global uchar16*)ptr);
+        uchar* v = (uchar*)&vv;
+#pragma unroll
+        for (int i = 0; i < 16; ++i)
+            dest[i] = (uint32_t)v[i];   
+    }
+    else if (num == 8)
+    {
+        uchar8 vv = *((global uchar8*)ptr);
+        uchar* v = (uchar*)&vv;
+#pragma unroll
+        for (int i = 0; i < 8; ++i)
+            dest[i] = (uint32_t)v[i];
+    }
+    else
+    {
+#pragma unroll
+        for (int i = 0; i < num; ++i)
+            dest[i] = (uint32_t)(ptr[i]);
+    }
 }
 
 

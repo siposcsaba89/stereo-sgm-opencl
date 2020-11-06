@@ -35,10 +35,10 @@ int main(int argc, char* argv[])
     "{ @img_source_left | | Left images }"
     "{ @img_source_right |  | Right images }"
     "{ md max_disparity | 128 | Maximum disparity }"
-    "{ sp subpixel | true | Compute subpixel accuracy }"
+    "{ sp subpixel | false | Compute subpixel accuracy }"
     "{ platform_idx | 0 | OpenCL plarform index }"
     "{ device_idx | 0 | OpenCL device index }"
-    "{ np num_path | 8 | Num path to optimize, 4 or 8 }";
+    "{ np num_path | 4 | Num path to optimize, 4 or 8 }";
 
     cv::CommandLineParser parser(argc, argv, keys);
     if (argc < 3)
@@ -76,6 +76,7 @@ int main(int argc, char* argv[])
     int platform_idx = parser.get<int>("platform_idx");
     int device_idx = parser.get<int>("device_idx");
     std::tie(cl_ctx, cl_device) = initCLCTX(platform_idx, device_idx);
+    cl_command_queue cl_queue = clCreateCommandQueue(cl_ctx, cl_device, 0, nullptr);
 
     sgm::cl::Parameters params;
     int input_depth = 8;
@@ -98,7 +99,14 @@ int main(int argc, char* argv[])
         bool should_close = false;
         left_capture.read(img1c);
         right_capture.read(img2c);
-        cv::Mat disp(img_size, CV_16UC1), disp_color, disp_8u;
+        int disp_type = output_depth == 8 ? CV_8UC1 : CV_16UC1;
+
+        cv::Mat disp(img_size, disp_type), disp_color, disp_8u;
+        cl_mem d_left, d_right, d_disp;
+        d_left = clCreateBuffer(cl_ctx, CL_MEM_READ_WRITE, width * height, nullptr, nullptr);
+        d_right = clCreateBuffer(cl_ctx, CL_MEM_READ_WRITE, width * height, nullptr, nullptr);
+        d_disp = clCreateBuffer(cl_ctx, CL_MEM_READ_WRITE, width * height * output_depth / 8, nullptr, nullptr);
+
         while ((!should_close))
         {
             if (img1c.channels() != 1)
@@ -112,9 +120,14 @@ int main(int argc, char* argv[])
                 right = img2c;
             }
 
+            clEnqueueWriteBuffer(cl_queue, d_left, true, 0, width * height, left.data, 0, nullptr, nullptr);
+            clEnqueueWriteBuffer(cl_queue, d_right, true, 0, width * height, right.data, 0, nullptr, nullptr);
+
             auto t = std::chrono::steady_clock::now();
-            ssgm.execute(left.data, right.data, reinterpret_cast<uint16_t*>(disp.data));
+            //ssgm.execute(left.data, right.data, reinterpret_cast<uint16_t*>(disp.data));
+            ssgm.execute(d_left, d_right, d_disp);
             std::chrono::milliseconds dur = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t);
+            clEnqueueReadBuffer(cl_queue, d_disp, true, 0, width * height * output_depth / 8, disp.data, 0, nullptr, nullptr);
 
 
             cv::Mat disparity_8u, disparity_color;
@@ -129,11 +142,11 @@ int main(int argc, char* argv[])
                 cv::Point(50, 50), 2, 0.75, cv::Scalar(255, 255, 255));
 
 
-            cv::imshow("disp", left);
-            cv::imshow("left image", disparity_color);
+            cv::imshow("left imagep", left);
+            cv::imshow("disp", disparity_color);
 
 
-            int key = cv::waitKey(1);
+            int key = cv::waitKey(0);
             if (key == 27)
             {
                 should_close = true;
@@ -141,7 +154,11 @@ int main(int argc, char* argv[])
             left_capture.read(img1c);
             right_capture.read(img2c);
         }
+        clReleaseMemObject(d_left);
+        clReleaseMemObject(d_right);
+        clReleaseMemObject(d_disp);
     }
+    clReleaseCommandQueue(cl_queue);
     clReleaseDevice(cl_device);
     clReleaseContext(cl_ctx);
     return 0;

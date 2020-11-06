@@ -232,8 +232,8 @@ struct ObliquePathAggregation
         err = clSetKernelArg(m_kernel, 6, sizeof(p2), &p2);
         err = clSetKernelArg(m_kernel, 7, sizeof(min_disp), &min_disp);
 
-        static const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
-        static const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE / SUBGROUP_SIZE;
+         const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
+         const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE / SUBGROUP_SIZE;
 
         const unsigned gdim = (width + height + PATHS_PER_BLOCK - 2) / PATHS_PER_BLOCK;
         const unsigned bdim = BLOCK_SIZE;

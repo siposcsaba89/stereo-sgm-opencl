@@ -81,6 +81,7 @@ struct CudaStereoSGMResources
     DeviceBuffer<uint16_t> d_right_disp;
     DeviceBuffer<uint16_t> d_tmp_left_disp;
     DeviceBuffer<uint16_t> d_tmp_right_disp;
+    DeviceBuffer<uint8_t> d_u8_out_disp;
 
     std::unique_ptr<SemiGlobalMatchingBase<input_type>> sgm_engine;
     SGMDetails sgm_details;
@@ -102,6 +103,7 @@ struct CudaStereoSGMResources
         , d_right_disp(ctx)
         , d_tmp_left_disp(ctx)
         , d_tmp_right_disp(ctx)
+        , d_u8_out_disp(ctx)
         , sgm_details(ctx, device)
     {
         if (disparity_size_ == 64)
@@ -257,6 +259,12 @@ void StereoSGM<input_type>::execute(const input_type* left_pixels,
         m_cu_res->d_src_left.allocate(size);
         m_cu_res->d_src_right.allocate(size);
     }
+    cl_mem d_out_disp = m_cu_res->d_left_disp.data();
+    if (m_output_depth_bits == 8 && m_cu_res->d_u8_out_disp.size() == 0)
+    {
+        m_cu_res->d_u8_out_disp.allocate(m_dst_pitch * m_height);
+        d_out_disp = m_cu_res->d_u8_out_disp.data();
+    }
 
     cl_int err = clEnqueueWriteBuffer(m_cl_cmd_queue,
         m_cu_res->d_src_left.data(),
@@ -273,13 +281,13 @@ void StereoSGM<input_type>::execute(const input_type* left_pixels,
         m_src_pitch * m_height * sizeof(input_type),
         right_pixels,
         0, nullptr, nullptr);
-    execute(m_cu_res->d_src_left.data(), m_cu_res->d_src_right.data(), m_cu_res->d_left_disp.data());
+    execute(m_cu_res->d_src_left.data(), m_cu_res->d_src_right.data(), d_out_disp);
 
     err = clEnqueueReadBuffer(m_cl_cmd_queue,
-        m_cu_res->d_left_disp.data(),
+        d_out_disp,
         true, // blocking
         0, //offset
-        m_dst_pitch * m_height * sizeof(uint16_t),
+        m_dst_pitch * m_height * m_output_depth_bits / 8,
         dst,
         0, nullptr, nullptr);
 }
@@ -296,7 +304,7 @@ void StereoSGM<input_type>::execute(cl_mem left_pixels, cl_mem right_pixels, cl_
     DeviceBuffer<uint16_t> out_disp(m_cl_ctx,
         m_dst_pitch * m_height * sizeof(uint16_t),
         dst);
-    DeviceBuffer<uint16_t>* left_disparity = &m_cu_res->d_tmp_left_disp;
+    DeviceBuffer<uint16_t>* left_disparity = &m_cu_res->d_left_disp;
     if (m_output_depth_bits == 16)
     {
         left_disparity = &out_disp;
@@ -356,6 +364,7 @@ void StereoSGM<input_type>::execute(cl_mem left_pixels, cl_mem right_pixels, cl_
             m_dst_pitch * m_height,
             m_cl_cmd_queue);
     }
+    clFinish(m_cl_cmd_queue);
 }
 
 template<typename input_type>

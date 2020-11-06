@@ -214,15 +214,18 @@ void SGMDetails::cast_16bit_8bit_array(const DeviceBuffer<uint16_t>& arr16bits,
     size_t global_size[1] = {
         ((num_elements + SIZE - 1) / SIZE) * local_size[0]
     };
+    cl_int err = clSetKernelArg(m_kernel_cast_16uto8u, 0, sizeof(cl_mem), &arr16bits.data());
+    err = clSetKernelArg(m_kernel_cast_16uto8u, 1, sizeof(cl_mem), &arr8bits.data());
+    err = clSetKernelArg(m_kernel_cast_16uto8u, 2, sizeof(num_elements), &num_elements);
 
-    cl_int err = clEnqueueNDRangeKernel(stream,
+    err = clEnqueueNDRangeKernel(stream,
         m_kernel_cast_16uto8u,
-        2,
+        1,
         nullptr,
         global_size,
         local_size,
         0, nullptr, nullptr);
-    CHECK_OCL_ERROR(err, "Error enequeuing winner_takes_all kernel");
+    CHECK_OCL_ERROR(err, "Error enequeuing cast_16bit_8bit_array kernel");
 }
 
 void SGMDetails::initDispRangeCorrection()
