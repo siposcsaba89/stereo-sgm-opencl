@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.10)
 
 project(libsgm_ocl)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 option(BUILD_EXAMPLES "Build sgm ocl example" ON)
+set(CL_TARGET_OPENCL_VERSION 120 CACHE STRING "OpenCL target version")
+message(STATUS "OpenCL target verison: ${CL_TARGET_OPENCL_VERSION}")
 
 find_package(OpenCL REQUIRED)
 
@@ -49,7 +51,8 @@ set(LIBSGM_PUBLIC_HDRS
     libsgm_ocl/types.h
 )
 
-add_library(libsgm_ocl ${LIBSGM_SRCS} ${LIBSGM_PUBLIC_HDRS} ${OCL_FILES})
+add_library(libsgm_ocl STATIC ${LIBSGM_SRCS} ${LIBSGM_PUBLIC_HDRS} ${OCL_FILES})
+target_compile_definitions(libsgm_ocl PUBLIC -DCL_TARGET_OPENCL_VERSION=${CL_TARGET_OPENCL_VERSION})
 add_library(libsgm_ocl::libsgm_ocl ALIAS libsgm_ocl)
 source_group(ocl FILES ${OCL_FILES})
 source_group(libsgm_ocl FILES ${LIBSGM_PUBLIC_HDRS})
@@ -96,8 +99,6 @@ install(FILES ${LIBSGM_PUBLIC_HDRS} DESTINATION include/libsgm_ocl/libsgm_ocl)
 
 if (BUILD_EXAMPLES)
     find_package(OpenCV REQUIRED)
-    add_executable(sgm-ocl-test examples/sgm_ocl_test.cpp)
-    target_link_libraries(sgm-ocl-test PRIVATE libsgm_ocl::libsgm_ocl ${OpenCV_LIBRARIES})
     add_executable(stereo_movie examples/stereo_movie.cpp)
     target_link_libraries(stereo_movie PRIVATE libsgm_ocl::libsgm_ocl ${OpenCV_LIBRARIES})
 endif()

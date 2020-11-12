@@ -221,9 +221,9 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
     }
 }
 
-template  PathAggregation<64>;
-template  PathAggregation<128>;
-template  PathAggregation<256>;
+template class PathAggregation<64>;
+template class PathAggregation<128>;
+template class PathAggregation<256>;
 
 
 template<int DIRECTION, unsigned int MAX_DISPARITY>
@@ -273,13 +273,13 @@ inline void VerticalPathAggregation<DIRECTION, MAX_DISPARITY>::init()
     }
 }
 //down2up
-template  VerticalPathAggregation<-1, 64>;
-template  VerticalPathAggregation<-1, 128>;
-template  VerticalPathAggregation<-1, 256>;
+template struct VerticalPathAggregation<-1, 64>;
+template struct VerticalPathAggregation<-1, 128>;
+template struct VerticalPathAggregation<-1, 256>;
 //up2down
-template  VerticalPathAggregation<1, 64>;
-template  VerticalPathAggregation<1, 128>;
-template  VerticalPathAggregation<1, 256>;
+template struct VerticalPathAggregation<1, 64>;
+template struct VerticalPathAggregation<1, 128>;
+template struct VerticalPathAggregation<1, 256>;
 
 
 template<int DIRECTION, unsigned int MAX_DISPARITY>
@@ -331,13 +331,13 @@ inline void HorizontalPathAggregation<DIRECTION, MAX_DISPARITY>::init()
     }
 }
 //down2up
-template  HorizontalPathAggregation<-1, 64>;
-template  HorizontalPathAggregation<-1, 128>;
-template  HorizontalPathAggregation<-1, 256>;
+template struct HorizontalPathAggregation<-1, 64>;
+template struct HorizontalPathAggregation<-1, 128>;
+template struct HorizontalPathAggregation<-1, 256>;
 //up2down
-template  HorizontalPathAggregation<1, 64>;
-template  HorizontalPathAggregation<1, 128>;
-template  HorizontalPathAggregation<1, 256>;
+template struct HorizontalPathAggregation<1, 64>;
+template struct HorizontalPathAggregation<1, 128>;
+template struct HorizontalPathAggregation<1, 256>;
 
 template<int X_DIRECTION, int Y_DIRECTION, unsigned int MAX_DISPARITY>
 void sgm::cl::ObliquePathAggregation<X_DIRECTION, Y_DIRECTION, MAX_DISPARITY>::init()
@@ -390,21 +390,21 @@ void sgm::cl::ObliquePathAggregation<X_DIRECTION, Y_DIRECTION, MAX_DISPARITY>::i
 
 
 //upleft2downright
-template  ObliquePathAggregation<1, 1, 64>;
-template  ObliquePathAggregation<1, 1, 128>;
-template  ObliquePathAggregation<1, 1, 256>;
+template struct ObliquePathAggregation<1, 1, 64>;
+template struct ObliquePathAggregation<1, 1, 128>;
+template struct ObliquePathAggregation<1, 1, 256>;
 //upright2downleft
-template  ObliquePathAggregation<-1, 1, 64>;
-template  ObliquePathAggregation<-1, 1, 128>;
-template  ObliquePathAggregation<-1, 1, 256>;
+template struct ObliquePathAggregation<-1, 1, 64>;
+template struct ObliquePathAggregation<-1, 1, 128>;
+template struct ObliquePathAggregation<-1, 1, 256>;
 //downright2upleft
-template  ObliquePathAggregation<-1, -1, 64>;
-template  ObliquePathAggregation<-1, -1, 128>;
-template  ObliquePathAggregation<-1, -1, 256>;
+template struct ObliquePathAggregation<-1, -1, 64>;
+template struct ObliquePathAggregation<-1, -1, 128>;
+template struct ObliquePathAggregation<-1, -1, 256>;
 //downleft2upright
-template  ObliquePathAggregation<1, -1, 64>;
-template  ObliquePathAggregation<1, -1, 128>;
-template  ObliquePathAggregation<1, -1, 256>;
+template struct ObliquePathAggregation<1, -1, 64>;
+template struct ObliquePathAggregation<1, -1, 128>;
+template struct ObliquePathAggregation<1, -1, 256>;
 
 }
 }

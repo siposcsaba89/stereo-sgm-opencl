@@ -6,6 +6,7 @@
 #include "sgm.hpp"
 #include "device_buffer.hpp"
 #include "sgm_details.h"
+#include <memory>
 
 namespace sgm
 {
@@ -15,7 +16,6 @@ template <typename input_type>
 class SemiGlobalMatchingBase 
 {
 public:
-    using output_type = output_type;
     virtual void execute(DeviceBuffer<output_type>& dst_L,
         DeviceBuffer<output_type>& dst_R,
         const DeviceBuffer<input_type>& src_L,
@@ -337,7 +337,7 @@ void StereoSGM<input_type>::execute(cl_mem left_pixels, cl_mem right_pixels, cl_
         m_dst_pitch,
         m_cl_cmd_queue
     );
-    m_cu_res->sgm_details.check_consistency<input_type>(*left_disparity,
+    m_cu_res->sgm_details.template check_consistency<input_type>(*left_disparity,
         m_cu_res->d_right_disp,
         left_img,
         m_width,

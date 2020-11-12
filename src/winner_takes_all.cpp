@@ -133,9 +133,9 @@ void WinnerTakesAll<MAX_DISPARITY>::enqueue(DeviceBuffer<uint16_t>& left,
     //cv::waitKey(0);
 }
 
-template WinnerTakesAll<64>;
-template WinnerTakesAll<128>;
-template WinnerTakesAll<256>;
+template class WinnerTakesAll<64>;
+template class WinnerTakesAll<128>;
+template class WinnerTakesAll<256>;
 
 }
 
