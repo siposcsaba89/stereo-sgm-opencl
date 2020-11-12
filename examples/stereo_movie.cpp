@@ -32,19 +32,20 @@ std::tuple<cl_context, cl_device_id> initCLCTX(int platform_idx, int device_idx)
 int main(int argc, char* argv[])
 {
     std::string keys =
+    "{ h help | | Print this message }"
     "{ @img_source_left | | Left images }"
     "{ @img_source_right |  | Right images }"
     "{ md max_disparity | 128 | Maximum disparity }"
-    "{ sp subpixel | false | Compute subpixel accuracy }"
+    "{ sp subpixel | true | Compute subpixel accuracy }"
     "{ platform_idx | 0 | OpenCL plarform index }"
     "{ device_idx | 0 | OpenCL device index }"
     "{ np num_path | 4 | Num path to optimize, 4 or 8 }";
 
     cv::CommandLineParser parser(argc, argv, keys);
-    if (argc < 3)
+    if (parser.has("help"))
     {
-        std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt [disp_size] [max_frame_num]" << std::endl;
-        std::exit(EXIT_FAILURE);
+        parser.printMessage();
+        return EXIT_SUCCESS;
     }
     std::string left_filename_fmt, right_filename_fmt;
     left_filename_fmt = parser.get<std::string>(0);
@@ -146,7 +147,7 @@ int main(int argc, char* argv[])
             cv::imshow("disp", disparity_color);
 
 
-            int key = cv::waitKey(0);
+            int key = cv::waitKey(1);
             if (key == 27)
             {
                 should_close = true;
@@ -172,6 +173,11 @@ std::tuple<cl_context, cl_device_id> initCLCTX(int platform_idx, int device_idx)
     assert((size_t)platform_idx < num_platform);
     std::vector<cl_platform_id> platform_ids(num_platform);
     clGetPlatformIDs(num_platform, platform_ids.data(), nullptr);
+    if(platform_ids.size() <= platform_idx)
+    {
+        std::cout << "Wrong platform index!" << std::endl;
+        exit(0);
+    }
     cl_uint num_devices;
     clGetDeviceIDs(platform_ids[platform_idx], CL_DEVICE_TYPE_GPU, 0, nullptr, &num_devices);
     assert((size_t)device_idx < num_devices);

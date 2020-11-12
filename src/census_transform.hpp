@@ -24,9 +24,6 @@ public:
     CensusTransform(cl_context ctx,
         cl_device_id device);
     ~CensusTransform();
-    const cl_mem get_output() const {
-        return m_feature_buffer.data();
-    }
 
     void enqueue(
         const DeviceBuffer<input_type> & src,
