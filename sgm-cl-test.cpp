@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 	//r:\2016.09.20_stereo_montevideo\video110414137\%05d_img.png r:\2016.09.20_stereo_montevideo\video210414137\%2505d_img.png
 
 	if (argc < 3) {
-		std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt [disp_size] [max_frame_num]" << std::endl;
+		std::cerr << "usage: StereoSGMCL left_img_fmt right_img_fmt intrinsics extrinsics [disp_size] [max_frame_num]" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
 	std::string left_filename_fmt, right_filename_fmt;
@@ -73,13 +73,13 @@ int main(int argc, char* argv[]) {
 	right_capture >> right;
 
 	int disp_size = 128;
-	if (argc >= 4) {
-		disp_size = atoi(argv[3]);
+	if (argc >= 6) {
+		disp_size = atoi(argv[5]);
 	}
 
 	int max_frame = 100;
-	if (argc >= 5) {
-		max_frame = atoi(argv[4]);
+	if (argc >= 7) {
+		max_frame = atoi(argv[6]);
 	}
 
 
@@ -90,8 +90,8 @@ int main(int argc, char* argv[]) {
 
 	cv::Size img_size = left.size();
 
-	std::string extrinsic_filename = "d:/extrinsics.yml";
-	std::string intrinsic_filename = "d:/intrinsics.yml";
+	std::string extrinsic_filename = argv[4];
+	std::string intrinsic_filename = argv[3];
 
 	cv::Rect roi1, roi2;
 	cv::Mat Q;
@@ -158,6 +158,8 @@ int main(int argc, char* argv[]) {
 	float cy = (float)M1.at<double>(5);
 	float b_d = (float)cv::norm(T, cv::NORM_L2);
 
+	
+
 	StereoSGMCL ssgm(width, height, disp_size);// , bits, 16, fl, cx, cy, b_d);
 
 	uint16_t* d_output_buffer = nullptr;
@@ -176,9 +178,14 @@ int main(int argc, char* argv[]) {
 		//cv::Mat left = cv::imread(buf, CV_LOAD_IMAGE_GRAYSCALE);
 		//sprintf(buf, right_filename_fmt.c_str(), frame_no);
 		//cv::Mat right = cv::imread(buf, CV_LOAD_IMAGE_GRAYSCALE);
-
-		cv::cvtColor(img1c, left, CV_BGR2GRAY);
-		cv::cvtColor(img2c, right, CV_BGR2GRAY);
+		if (img1c.channels() == 3)
+			cv::cvtColor(img1c, left, cv::COLOR_BGR2GRAY);
+		else
+			left = img1c;
+		if (img2c.channels() == 3)
+			cv::cvtColor(img2c, right, cv::COLOR_BGR2GRAY);
+		else
+			right = img2c;
 		//cv::cvtColor(img1c, left, CV_BayerRG2GRAY);
 		//cv::cvtColor(img2c, right, CV_BayerRG2GRAY);
 
@@ -214,7 +221,7 @@ int main(int argc, char* argv[]) {
 		ssgm.execute(left.data, right.data, disp.data); // , sgm::DST_TYPE_CUDA_PTR, 16);
 		std::cout << clock() - st << std::endl;
 
-		cv::imshow("disp", (disp * 2) * 256);
+		cv::imshow("disp", disp * 16 * 2);
 
 		int key = cv::waitKey(1);
 

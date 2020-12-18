@@ -585,6 +585,54 @@ kernel void compute_stereo_oblique_dir_kernel_7(
 	}
 }
 
+#define SUBPIXEL_SHIFT 4
+
+inline void calculateSubpixelDisparity(
+	int minCostL1, int minCostL2,
+	int minDispL1, int minDispL2,
+	int minCostR1, int minCostR2,
+	int minDispR1, int minDispR2,
+	const int max_disparity,
+	const uint16_t* current_cost,
+	uint16_t* tmp_costs,
+	uint16_t* leftDisp, uint16_t* rightDisp,
+	int x, int y, int width
+)
+{
+	const float uniqueness = 0.95f;
+
+	if (get_local_id(0) == 0)
+	{
+		int lhv = minCostL2 * uniqueness;
+		int disp = (lhv < minCostL1  && abs(minDispL1 - minDispL2) > 1) ? 0 : minDispL1; // add "+1" 
+		int sub_pix_disp = disp;
+		sub_pix_disp <<= SUBPIXEL_SHIFT;
+		if (disp > 1 && disp < max_disparity - 1)
+		{
+			const int left = current_cost[disp - 1];
+			const int right = current_cost[disp + 1];
+			const int numer = left - right;
+			const int denom = left - 2 * minCostL1 + right;
+			sub_pix_disp += ((numer << SUBPIXEL_SHIFT) + denom) / (2 * denom);
+		}
+		leftDisp[y * width + x] = sub_pix_disp;
+		//right disparity
+		int rhv = minCostR2 * uniqueness;
+		disp = (rhv < minCostR1 && abs(minDispR1 - minDispR2) > 1) ? 0 : minDispR1; // add "+1" 
+		sub_pix_disp = disp;
+		sub_pix_disp <<= SUBPIXEL_SHIFT;
+		if (disp > 1 && disp < max_disparity - 1)
+		{
+			const int left = tmp_costs[disp - 1];
+			const int right = tmp_costs[disp + 1];
+			const int numer = left - right;
+			const int denom = left - 2 * minCostR1 + right;
+			sub_pix_disp += ((numer << SUBPIXEL_SHIFT) + denom) / (2 * denom);
+		}
+		rightDisp[y * width + x] = sub_pix_disp;
+	}
+}
+
 
 #define WTA_PIXEL_IN_BLOCK 4
 
@@ -707,12 +755,13 @@ kernel void winner_takes_all_kernel128(global ushort * leftDisp, global ushort *
 	if (minDispR2 == 0xffff) { minDispR2 = -1; }
 	///////////////////////////////////////////////////////////////////////////////////
 
-	if (idx == 0) {
-		float lhv = minCostL2 * uniqueness;
-		leftDisp[y * width + x] = (lhv < minCostL1 && abs(minDispL1 - minDispL2) > 1) ? 0 : minDispL1 + 1; // add "+1" 
-		float rhv = minCostR2 * uniqueness;
-		rightDisp[y * width + x] = (rhv < minCostR1 && abs(minDispR1 - minDispR2) > 1) ? 0 : minDispR1 + 1; // add "+1" 
-	}
+	calculateSubpixelDisparity(
+		minCostL1, minCostL2, minDispL1, minDispL2,
+		minCostR1, minCostR2, minDispR1, minDispR2,
+		DISP_SIZE,
+		current_cost,
+		tmp_costs,
+		leftDisp, rightDisp, x, y, width);
 }
 
 
@@ -727,8 +776,10 @@ kernel void check_consistency_kernel_left(
 
 	uchar mask = d_left[i * width + j];
 	int d = d_leftDisp[i * width + j];
-	int k = j - d;
-	if (mask == 0 || d <= 0 || (k >= 0 && k < width && abs(d_rightDisp[i * width + k] - d) > 1)) {
+	int k = j - (d >> SUBPIXEL_SHIFT);
+	int d_r = d_rightDisp[i * width + k];
+	if (mask == 0 || d <= 0 || (k >= 0 && k < width && abs(d_r - d) > (1 << SUBPIXEL_SHIFT)))
+	{
 		// masked or left-right inconsistent pixel -> invalid
 		d_leftDisp[i * width + j] = 0;
 	}
