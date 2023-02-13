@@ -54,6 +54,16 @@ int main(int argc, char* argv[])
 
     cv::VideoCapture left_capture(left_filename_fmt);
     cv::VideoCapture right_capture(right_filename_fmt);
+    if (!left_capture.isOpened())
+    {
+        std::cout << "Failed to open image stream: " << left_filename_fmt << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    if (!right_capture.isOpened())
+    {
+        std::cout << "Failed to open image stream: " << right_filename_fmt << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     left_capture.set(cv::CAP_PROP_POS_FRAMES, 0.0);
     right_capture.set(cv::CAP_PROP_POS_FRAMES, 0.0);
 
@@ -71,6 +81,12 @@ int main(int argc, char* argv[])
 
     int width = left.cols;
     int height = left.rows;
+
+    if (width * height == 0)
+    {
+        std::cout << "Wrong input size: " << width << ", " << height << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 
     cl_context cl_ctx;
     cl_device_id cl_device;
@@ -98,8 +114,6 @@ int main(int argc, char* argv[])
         cv::Mat img1c, img2c;
 
         bool should_close = false;
-        left_capture.read(img1c);
-        right_capture.read(img2c);
         int disp_type = output_depth == 8 ? CV_8UC1 : CV_16UC1;
 
         cv::Mat disp(img_size, disp_type), disp_color, disp_8u;
@@ -110,6 +124,19 @@ int main(int argc, char* argv[])
 
         while ((!should_close))
         {
+            left_capture.read(img1c);
+            if (img1c.empty())
+            {
+                std::cout << "Failed to read left image stream!" << std::endl;
+                break;
+            }
+            right_capture.read(img2c);
+            if (img2c.empty())
+            {
+                std::cout << "Failed to read right image stream!" << std::endl;
+                break;
+            }
+
             if (img1c.channels() != 1)
             {
                 cv::cvtColor(img1c, left, cv::COLOR_BGR2GRAY);
@@ -152,8 +179,6 @@ int main(int argc, char* argv[])
             {
                 should_close = true;
             }
-            left_capture.read(img1c);
-            right_capture.read(img2c);
         }
         clReleaseMemObject(d_left);
         clReleaseMemObject(d_right);
