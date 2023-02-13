@@ -31,6 +31,7 @@ kernel void aggregate_oblique_path_kernel(
 
     local feature_type right_buffer[2 * DP_BLOCK_SIZE][RIGHT_BUFFER_ROWS];
     local feature_type shfl_buffer[BLOCK_SIZE];
+    local uint32_t local_min_shared[BLOCK_SIZE];
     DynamicProgramming dp;
     init(&dp, shfl_buffer);
 
@@ -96,7 +97,7 @@ kernel void aggregate_oblique_path_kernel(
             {
                 local_costs[j] = popcount(left_value ^ right_values[j]);
             }
-            update(&dp, local_costs, p1, p2, shfl_mask, shfl_buffer);
+            update(&dp, local_costs, p1, p2, shfl_mask, shfl_buffer, local_min_shared);
             store_uint8_vector(
                 &dest[dp_offset + x * MAX_DISPARITY + y * MAX_DISPARITY * width], DP_BLOCK_SIZE,
                 dp.dp);

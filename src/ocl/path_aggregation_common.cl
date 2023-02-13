@@ -22,12 +22,12 @@ void update(DynamicProgramming* dp,
     uint32_t p1,
     uint32_t p2,
     uint32_t mask,
-    local uint32_t * shfl_memory)
+    local uint32_t * shfl_memory,
+    local uint32_t * local_min_shared)
 {
     const unsigned int lane_id = get_local_id(0) % SUBGROUP_SIZE;
 
     const uint32_t dp0 = dp->dp[0];
-    local uint32_t local_min_shared[BLOCK_SIZE];
     local_min_shared[get_local_id(0)] = 0;
     barrier(CLK_LOCAL_MEM_FENCE);
 

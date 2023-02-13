@@ -32,6 +32,7 @@ kernel void aggregate_horizontal_path_kernel(
     feature_type right_buffer[DP_BLOCKS_PER_THREAD][DP_BLOCK_SIZE];
     local feature_type shfl_buffer[BLOCK_SIZE];
     local feature_type shfl_buffer_local[BLOCK_SIZE];
+    local uint32_t local_min_shared[BLOCK_SIZE];
 
     DynamicProgramming dp[DP_BLOCKS_PER_THREAD];
     //TODO : works until DP_BLOCKS_PER_THREAD is 1
@@ -154,7 +155,7 @@ kernel void aggregate_horizontal_path_kernel(
                 for (unsigned int k = 0; k < DP_BLOCK_SIZE; ++k) {
                     local_costs[k] = popcount(left_value ^ right_buffer[j][k]);
                 }
-                update(&dp[j],local_costs, p1, p2, shfl_mask, shfl_buffer);
+                update(&dp[j],local_costs, p1, p2, shfl_mask, shfl_buffer, local_min_shared);
                 store_uint8_vector_8u(
                     &dest[j * dest_step + x * MAX_DISPARITY + dp_offset],
                     dp[j].dp);

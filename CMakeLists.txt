@@ -65,7 +65,7 @@ source_group(libsgm_ocl FILES ${LIBSGM_PUBLIC_HDRS})
 #little bit nicer
 target_link_libraries(libsgm_ocl PRIVATE $<BUILD_INTERFACE:rc_ocl_sgm>)
 #for debugging
-find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED CONFIG)
 target_link_libraries(libsgm_ocl PRIVATE ${OpenCV_LIBRARIES})
 
 set_target_properties(libsgm_ocl PROPERTIES DEBUG_POSTFIX _d RELWITHDEBINFO_POSTFIX _rd)
@@ -98,7 +98,7 @@ install(FILES ${LIBSGM_PUBLIC_HDRS} DESTINATION include/libsgm_ocl/libsgm_ocl)
 
 
 if (BUILD_EXAMPLES)
-    find_package(OpenCV REQUIRED)
+    find_package(OpenCV REQUIRED CONFIG)
     add_executable(stereo_movie examples/stereo_movie.cpp)
     target_link_libraries(stereo_movie PRIVATE libsgm_ocl::libsgm_ocl ${OpenCV_LIBRARIES})
 endif()
