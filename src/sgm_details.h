@@ -29,7 +29,8 @@ namespace cl
 class SGMDetails
 {
 public:
-    SGMDetails(cl_context ctx, cl_device_id device);
+    template<typename input_type>
+    SGMDetails(cl_context ctx, cl_device_id device, input_type input_t);
     ~SGMDetails();
     void median_filter(
         const DeviceBuffer<uint16_t>& d_src,

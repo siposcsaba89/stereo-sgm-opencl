@@ -7,7 +7,7 @@ namespace sgm
 namespace cl
 {
 template<size_t MAX_DISPARITY>
-PathAggregation<MAX_DISPARITY>::PathAggregation(cl_context ctx, cl_device_id device)
+PathAggregation<MAX_DISPARITY>::PathAggregation(cl_context ctx, cl_device_id device, PathType path_type, int width, int height)
     : m_cost_buffer(ctx)
     , m_down2up(ctx, device)
     , m_up2down(ctx, device)
@@ -17,12 +17,35 @@ PathAggregation<MAX_DISPARITY>::PathAggregation(cl_context ctx, cl_device_id dev
     , m_upright2downleft(ctx, device)
     , m_downright2upleft(ctx, device)
     , m_downleft2upright(ctx, device)
+    , m_path_type(path_type)
+    , m_width(width)
+    , m_height(height)
 {
     for (size_t i = 0; i < MAX_NUM_PATHS; ++i)
     {
         cl_int err;
         m_streams[i] = clCreateCommandQueue(ctx, device, 0, &err);
         CHECK_OCL_ERROR(err, "Failed to create command queue");
+    }
+
+    //allocating memory
+    const unsigned int num_paths = path_type == PathType::SCAN_4PATH ? 4 : 8;
+    const size_t buffer_size = width * height * MAX_DISPARITY * num_paths;
+    const size_t buffer_step = width * height * MAX_DISPARITY;
+    if (m_cost_buffer.size() != buffer_size)
+    {
+        m_cost_buffer.allocate(buffer_size);
+        m_sub_buffers.resize(num_paths);
+        for (unsigned i = 0; i < num_paths; ++i)
+        {
+            cl_buffer_region region = { buffer_step * i, buffer_step };
+            cl_int err;
+            m_sub_buffers[i].setBufferData(nullptr, buffer_step, clCreateSubBuffer(m_cost_buffer.data(),
+                CL_MEM_READ_WRITE,
+                CL_BUFFER_CREATE_TYPE_REGION,
+                &region, &err));
+            CHECK_OCL_ERROR(err, "Error creating subbuffer!");
+        }
     }
 }
 
@@ -48,43 +71,19 @@ const DeviceBuffer<cost_type>& PathAggregation<MAX_DISPARITY>::get_output() cons
 template<size_t MAX_DISPARITY>
 void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& left,
     const DeviceBuffer<feature_type>& right,
-    int width,
-    int height,
-    PathType path_type,
     unsigned int p1,
     unsigned int p2,
     int min_disp,
     cl_command_queue stream)
 {
-
-    //allocating memory
-    const unsigned int num_paths = path_type == PathType::SCAN_4PATH ? 4 : 8;
-    const size_t buffer_size = width * height * MAX_DISPARITY * num_paths;
-    const size_t buffer_step = width * height * MAX_DISPARITY;
-    if (m_cost_buffer.size() != buffer_size)
-    {
-        m_cost_buffer.allocate(buffer_size);
-        m_sub_buffers.resize(num_paths);
-        for (unsigned i = 0; i < num_paths; ++i)
-        {
-            cl_buffer_region region = { buffer_step * i, buffer_step };
-            cl_int err;
-            m_sub_buffers[i].setBufferData(nullptr, buffer_step, clCreateSubBuffer(m_cost_buffer.data(),
-                CL_MEM_READ_WRITE,
-                CL_BUFFER_CREATE_TYPE_REGION,
-                &region, &err));
-            CHECK_OCL_ERROR(err, "Error creating subbuffer!");
-        }
-    }
-
     cl_int err = clFinish(stream);
     CHECK_OCL_ERROR(err, "Error finishing queue");
     m_up2down.enqueue(
         m_sub_buffers[0],
         left,
         right,
-        width,
-        height,
+        m_width,
+        m_height,
         p1,
         p2,
         min_disp,
@@ -94,8 +93,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         m_sub_buffers[1],
         left,
         right,
-        width,
-        height,
+        m_width,
+        m_height,
         p1,
         p2,
         min_disp,
@@ -105,8 +104,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         m_sub_buffers[2],
         left,
         right,
-        width,
-        height,
+        m_width,
+        m_height,
         p1,
         p2,
         min_disp,
@@ -116,15 +115,15 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         m_sub_buffers[3],
         left,
         right,
-        width,
-        height,
+        m_width,
+        m_height,
         p1,
         p2,
         min_disp,
         m_streams[3]
     );
 
-    if (path_type == PathType::SCAN_8PATH)
+    if (m_path_type == PathType::SCAN_8PATH)
     {
 
         //{
@@ -141,8 +140,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             m_sub_buffers[4],
             left,
             right,
-            width,
-            height,
+            m_width,
+            m_height,
             p1,
             p2,
             min_disp,
@@ -182,8 +181,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             m_sub_buffers[5],
             left,
             right,
-            width,
-            height,
+            m_width,
+            m_height,
             p1,
             p2,
             min_disp,
@@ -193,8 +192,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             m_sub_buffers[6],
             left,
             right,
-            width,
-            height,
+            m_width,
+            m_height,
             p1,
             p2,
             min_disp,
@@ -205,8 +204,8 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
             m_sub_buffers[7],
             left,
             right,
-            width,
-            height,
+            m_width,
+            m_height,
             p1,
             p2,
             min_disp,
@@ -214,6 +213,7 @@ void PathAggregation<MAX_DISPARITY>::enqueue(const DeviceBuffer<feature_type>& l
         );
     }
 
+    const unsigned int num_paths = m_path_type == PathType::SCAN_4PATH ? 4 : 8;
     for (unsigned i = 0; i < num_paths; ++i)
     {
         cl_int err = clFinish(m_streams[i]);

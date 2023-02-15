@@ -33,7 +33,9 @@ public:
         const char* kernel_src = kernel_str.c_str();
         size_t kenel_src_length = kernel_str.size();
         m_cl_program = clCreateProgramWithSource(ctx, 1, &kernel_src, &kenel_src_length, &err);
-        err = clBuildProgram(m_cl_program, 1, &device, nullptr, nullptr, nullptr);
+        err = clCompileProgram(m_cl_program, 1, &device, nullptr, 0, nullptr, nullptr, nullptr, nullptr);
+        m_cl_program = clLinkProgram(ctx, 1, &device, nullptr, 1, &m_cl_program, nullptr, nullptr, &err);
+        //err = clBuildProgram(m_cl_program, 1, &device, nullptr, nullptr, nullptr);
 
         size_t build_log_size = 0;
         clGetProgramBuildInfo(m_cl_program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &build_log_size);

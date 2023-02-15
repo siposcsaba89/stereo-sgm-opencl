@@ -9,10 +9,60 @@ namespace sgm
 {
 namespace cl
 {
-SGMDetails::SGMDetails(cl_context ctx, cl_device_id device)
+template<typename input_type>
+SGMDetails::SGMDetails(cl_context ctx, cl_device_id device, input_type t)
     : m_cl_context(ctx)
     , m_cl_device_id(device)
 {
+    if (nullptr == m_kernel_median)
+    {
+        auto fs = cmrc::ocl_sgm::get_filesystem();
+        auto kernel_corr_disp_range = fs.open("src/ocl/median_filter.cl");
+        auto kernel_src = std::string(kernel_corr_disp_range.begin(), kernel_corr_disp_range.end());
+        m_program_median.init(m_cl_context, m_cl_device_id, kernel_src);
+
+        m_kernel_median = m_program_median.getKernel("median3x3");
+    }
+    if (nullptr == m_kernel_check_consistency)
+    {
+        auto fs = cmrc::ocl_sgm::get_filesystem();
+        auto kernel_inttypes = fs.open("src/ocl/inttypes.cl");
+        auto kernel_check_consistency = fs.open("src/ocl/check_consistency.cl");
+        auto kernel_src = std::string(kernel_inttypes.begin(), kernel_inttypes.end())
+            + std::string(kernel_check_consistency.begin(), kernel_check_consistency.end());
+
+        std::string kernel_template_types;
+        if (std::is_same<input_type, uint16_t>::value)
+        {
+            kernel_template_types = "#define SRC_T uint16_t\n";
+        }
+        else if (std::is_same<input_type, uint8_t>::value)
+        {
+            kernel_template_types = "#define SRC_T uint8_t\n";
+        }
+        else
+        {
+            assert(false);
+            throw std::runtime_error("Input image type must be 1 channel uint8_t or uint16_t");
+        }
+
+        std::string kernel_SUBPIXEL_SHIFT = "#define SUBPIXEL_SHIFT " + std::to_string(SubpixelShift()) + "\n";
+        kernel_src = std::regex_replace(kernel_src, std::regex("@SRC_T@"), kernel_template_types);
+        kernel_src = std::regex_replace(kernel_src, std::regex("@SUBPIXEL_SHIFT@"), kernel_SUBPIXEL_SHIFT);
+
+        m_program_check_consistency.init(m_cl_context, m_cl_device_id, kernel_src);
+        m_kernel_check_consistency = m_program_check_consistency.getKernel("check_consistency_kernel");
+    }
+    if (nullptr == m_kernel_disp_corr)
+    {
+        initDispRangeCorrection();
+    };
+
+    if (nullptr == m_kernel_cast_16uto8u)
+    {
+        initDispRangeCorrection();
+    }
+
 }
 SGMDetails::~SGMDetails()
 {
@@ -42,15 +92,6 @@ void SGMDetails::median_filter(const DeviceBuffer<uint16_t>& d_src,
     int pitch,
     cl_command_queue stream)
 {
-    if (nullptr == m_kernel_median)
-    {
-        auto fs = cmrc::ocl_sgm::get_filesystem();
-        auto kernel_corr_disp_range = fs.open("src/ocl/median_filter.cl");
-        auto kernel_src = std::string(kernel_corr_disp_range.begin(), kernel_corr_disp_range.end());
-        m_program_median.init(m_cl_context, m_cl_device_id, kernel_src);
-
-        m_kernel_median = m_program_median.getKernel("median3x3");
-    }
     cl_int err = clSetKernelArg(m_kernel_median,
         0,
         sizeof(cl_mem),
@@ -89,37 +130,6 @@ inline void SGMDetails::check_consistency(DeviceBuffer<uint16_t>& d_left_disp,
     int LR_max_diff, 
     cl_command_queue stream)
 {
-    if (nullptr == m_kernel_check_consistency)
-    {
-        auto fs = cmrc::ocl_sgm::get_filesystem();
-        auto kernel_inttypes = fs.open("src/ocl/inttypes.cl");
-        auto kernel_check_consistency = fs.open("src/ocl/check_consistency.cl");
-        auto kernel_src = std::string(kernel_inttypes.begin(), kernel_inttypes.end())
-            + std::string(kernel_check_consistency.begin(), kernel_check_consistency.end());
-
-        std::string kernel_template_types;
-        if (std::is_same<input_type, uint16_t>::value)
-        {
-            kernel_template_types = "#define SRC_T uint16_t\n";
-        }
-        else if (std::is_same<input_type, uint8_t>::value)
-        {
-            kernel_template_types = "#define SRC_T uint8_t\n";
-        }
-        else
-        {
-            assert(false);
-            throw std::runtime_error("Input image type must be 1 channel uint8_t or uint16_t");
-        }
-
-        std::string kernel_SUBPIXEL_SHIFT = "#define SUBPIXEL_SHIFT " + std::to_string(SubpixelShift()) + "\n";
-        kernel_src = std::regex_replace(kernel_src, std::regex("@SRC_T@"), kernel_template_types);
-        kernel_src = std::regex_replace(kernel_src, std::regex("@SUBPIXEL_SHIFT@"), kernel_SUBPIXEL_SHIFT);
-
-        m_program_check_consistency.init(m_cl_context, m_cl_device_id, kernel_src);
-        m_kernel_check_consistency = m_program_check_consistency.getKernel("check_consistency_kernel");
-    }
-
     static constexpr int SIZE = 16;
     size_t local_size[2] = { SIZE, SIZE };
     size_t global_size[2] = {
@@ -163,11 +173,6 @@ void SGMDetails::correct_disparity_range(DeviceBuffer<uint16_t>& d_disp,
     {
         return;
     }
-
-    if (nullptr == m_kernel_disp_corr)
-    {
-        initDispRangeCorrection();
-    };
     
     const int scale = subpixel ? SubpixelScale() : 1;
     const int min_disp_scaled = min_disp * scale;
@@ -205,10 +210,6 @@ void SGMDetails::cast_16bit_8bit_array(const DeviceBuffer<uint16_t>& arr16bits,
     int num_elements,
     cl_command_queue stream)
 {
-    if (nullptr == m_kernel_cast_16uto8u)
-    {
-        initDispRangeCorrection();
-    }
     static constexpr int SIZE = 256;
     size_t local_size[1] = { SIZE };
     size_t global_size[1] = {
@@ -263,6 +264,9 @@ template void SGMDetails::check_consistency<uint16_t>(DeviceBuffer<uint16_t>& d_
     bool subpixel,
     int LR_max_diff,
     cl_command_queue stream);
+
+template SGMDetails::SGMDetails(cl_context ctx, cl_device_id device, uint8_t);
+template SGMDetails::SGMDetails(cl_context ctx, cl_device_id device, uint16_t);
 
 }
 }

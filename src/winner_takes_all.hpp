@@ -30,7 +30,7 @@ template <size_t MAX_DISPARITY>
 class WinnerTakesAll 
 {
 public:
-    WinnerTakesAll(cl_context ctx, cl_device_id device);
+    WinnerTakesAll(cl_context ctx, cl_device_id device, PathType path_type, bool subpixel, int pitch, int height);
 
     const DeviceBuffer<uint16_t>& get_left_output() const
     {
@@ -48,8 +48,6 @@ public:
         int height,
         int pitch,
         float uniqueness,
-        bool subpixel,
-        PathType path_type,
         cl_command_queue stream);
 
     void enqueue(
@@ -60,8 +58,6 @@ public:
         int height,
         int pitch,
         float uniqueness,
-        bool subpixel,
-        PathType path_type,
         cl_command_queue stream);
 private:
     DeviceBuffer<uint16_t> m_left_buffer;

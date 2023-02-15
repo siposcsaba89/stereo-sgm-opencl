@@ -135,14 +135,7 @@ public:
 
 private:
     void initCL();
-    //void initCLCTX(int platform_idx, int device_idx);
     void finishQueue();
-    //void census();
-    //void mem_init();
-    //void path_aggregation();
-    //void winner_takes_all();
-    //void median();
-    //void check_consistency_left();
 private:
 
     StereoSGM(const StereoSGM&) = delete;
@@ -158,30 +151,9 @@ private:
     int m_src_pitch;
     Parameters m_params = Parameters();
 
-
-    //cl context info
     cl_context m_cl_ctx;
     cl_device_id m_cl_device;
     cl_command_queue m_cl_cmd_queue;
-
-
-
-    //cl_kernel m_winner_takes_all_kernel128;
-
-    //cl_kernel m_check_consistency_left;
-
-    //cl_kernel m_median_3x3;
-    //cl_kernel m_copy_u8_to_u16;
-    //cl_kernel m_clear_buffer;
-
-
-    //cl_mem d_src_left, d_src_right,
-    //    d_left_census_cost, d_right_census_cost,
-    //    d_cost_buffer,
-    //    d_left_disparity, d_right_disparity,
-    //    d_tmp_left_disp, d_tmp_right_disp;
-
-    //cl_mem d_sub_buffers[8];
 };
 
 }

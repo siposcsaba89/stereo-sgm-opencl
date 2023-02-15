@@ -47,6 +47,31 @@ inline CensusTransform<input_type>::CensusTransform(cl_context ctx,
     : m_cl_ctx(ctx)
     , m_cl_device(device)
 {
+    std::string kernel_template_types;
+
+    if (std::is_same<input_type, uint16_t>::value)
+    {
+        kernel_template_types = "#define pixel_type uint16_t\n";
+    }
+    else if (std::is_same<input_type, uint8_t>::value)
+    {
+        kernel_template_types = "#define pixel_type uint8_t\n";
+    }
+    else
+    {
+        assert(false);
+        throw std::runtime_error("Input image type must be 1 channel uint8_t or uint16_t");
+    }
+    //resource reading
+    auto fs = cmrc::ocl_sgm::get_filesystem();
+    auto kernel_rc = fs.open("src/ocl/census.cl");
+    auto kernel = std::string(kernel_rc.begin(), kernel_rc.end());
+    std::regex px_type_regex("@pixel_type@");
+    kernel = std::regex_replace(kernel, px_type_regex, kernel_template_types);
+    m_program.init(m_cl_ctx, m_cl_device, kernel);
+
+    m_census_kernel = m_program.getKernel("census_transform_kernel");
+    
 }
 
 template<typename input_type>
@@ -67,34 +92,6 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
     int pitch,
     cl_command_queue stream)
 {
-    if (m_census_kernel == nullptr)
-    {
-        std::string kernel_template_types;
-
-        if (std::is_same<input_type, uint16_t>::value)
-        {
-            kernel_template_types = "#define pixel_type uint16_t\n";
-        }
-        else if (std::is_same<input_type, uint8_t>::value)
-        {
-            kernel_template_types = "#define pixel_type uint8_t\n";
-        }
-        else
-        {
-            assert(false);
-            throw std::runtime_error("Input image type must be 1 channel uint8_t or uint16_t");
-        }
-        //resource reading
-        auto fs = cmrc::ocl_sgm::get_filesystem();
-        auto kernel_rc = fs.open("src/ocl/census.cl");
-        auto kernel = std::string(kernel_rc.begin(), kernel_rc.end());
-        std::regex px_type_regex("@pixel_type@");
-        kernel = std::regex_replace(kernel, px_type_regex, kernel_template_types);
-        m_program.init(m_cl_ctx, m_cl_device, kernel);
-
-        m_census_kernel = m_program.getKernel("census_transform_kernel");
-    }
-
     cl_int err = clSetKernelArg(m_census_kernel,
         0,
         sizeof(cl_mem),

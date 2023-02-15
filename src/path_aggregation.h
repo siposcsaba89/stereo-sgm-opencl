@@ -39,6 +39,7 @@ struct VerticalPathAggregation
         : m_cl_ctx(ctx)
         , m_cl_device(device)
     {
+        init();
     }
     ~VerticalPathAggregation()
     {
@@ -63,9 +64,6 @@ struct VerticalPathAggregation
         int min_disp,
         cl_command_queue stream)
     {
-        if (!m_kernel)
-            init();
-
         cl_int err;
         err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
         err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
@@ -119,6 +117,7 @@ struct HorizontalPathAggregation
         : m_cl_ctx(ctx)
         , m_cl_device(device)
     {
+        init();
     }
     ~HorizontalPathAggregation()
     {
@@ -142,9 +141,6 @@ struct HorizontalPathAggregation
         int min_disp,
         cl_command_queue stream)
     {
-        if (!m_kernel)
-            init();
-
         cl_int err;
         err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
         err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
@@ -196,6 +192,7 @@ struct ObliquePathAggregation
         : m_cl_ctx(ctx)
         , m_cl_device(device)
     {
+        init();
     }
     ~ObliquePathAggregation()
     {
@@ -219,9 +216,6 @@ struct ObliquePathAggregation
         int min_disp,
         cl_command_queue stream)
     {
-        if (!m_kernel)
-            init();
-
         cl_int err;
         err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
         err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
@@ -272,7 +266,7 @@ private:
 
 public:
     PathAggregation(cl_context ctx,
-        cl_device_id device);
+        cl_device_id device, PathType path_type, int width, int height);
     ~PathAggregation();
 
     const DeviceBuffer<cost_type>& get_output() const;
@@ -280,9 +274,6 @@ public:
     void enqueue(
         const DeviceBuffer<feature_type> & left,
         const DeviceBuffer<feature_type>& right,
-        int width,
-        int height,
-        PathType path_type,
         unsigned int p1,
         unsigned int p2,
         int min_disp,
@@ -297,7 +288,9 @@ private:
     ObliquePathAggregation<-1, 1, MAX_DISPARITY> m_upright2downleft;
     ObliquePathAggregation<-1, -1, MAX_DISPARITY> m_downright2upleft;
     ObliquePathAggregation<1, -1, MAX_DISPARITY> m_downleft2upright;
-    
+    PathType m_path_type;
+    int m_width;
+    int m_height;
 };
 
 }

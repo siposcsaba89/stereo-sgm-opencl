@@ -36,7 +36,13 @@ private:
     std::unique_ptr<Impl> m_impl;
 
 public:
-    SemiGlobalMatching(cl_context context, cl_device_id device);
+    SemiGlobalMatching(cl_context context,
+        cl_device_id device,
+        int width,
+        int height,
+        int src_pitch,
+        int dst_pitch,
+        const Parameters& param);
     ~SemiGlobalMatching();
 
     void enqueue(
@@ -46,11 +52,6 @@ public:
         const DeviceBuffer<input_type> & src_right,
         DeviceBuffer<feature_type>& feature_buffer_left,
         DeviceBuffer<feature_type>& feature_buffer_right,
-        int width,
-        int height,
-        int src_pitch,
-        int dst_pitch,
-        const Parameters& param,
         cl_command_queue stream);
 };
 

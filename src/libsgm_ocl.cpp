@@ -22,11 +22,6 @@ public:
         const DeviceBuffer<input_type>& src_R,
         DeviceBuffer<feature_type>& feature_buff_l,
         DeviceBuffer<feature_type>& feature_buff_r,
-        int w,
-        int h,
-        int sp,
-        int dp,
-        Parameters& param,
         cl_command_queue queue) = 0;
 
     virtual ~SemiGlobalMatchingBase() {}
@@ -36,8 +31,13 @@ template <typename input_type, int DISP_SIZE>
 class SemiGlobalMatchingImpl : public SemiGlobalMatchingBase<input_type>
 {
 public:
-    SemiGlobalMatchingImpl(cl_context ctx, cl_device_id device)
-        : sgm_engine_(ctx, device) {}
+    SemiGlobalMatchingImpl(cl_context ctx, cl_device_id device,
+        int width,
+        int height,
+        int src_pitch,
+        int dst_pitch,
+        Parameters& param)
+        : sgm_engine_(ctx, device, width, height, src_pitch, dst_pitch, param) {}
     void execute(
         DeviceBuffer<output_type> & dst_L,
         DeviceBuffer<output_type> & dst_R,
@@ -45,11 +45,6 @@ public:
         const DeviceBuffer<input_type>& src_R,
         DeviceBuffer<feature_type>& feature_buff_l,
         DeviceBuffer<feature_type>& feature_buff_r,
-        int w,
-        int h,
-        int sp, 
-        int dp, 
-        Parameters& param,
         cl_command_queue queue) override
     {
         sgm_engine_.enqueue(dst_L,
@@ -58,11 +53,6 @@ public:
             src_R,
             feature_buff_l,
             feature_buff_r,
-            w, 
-            h,
-            sp,
-            dp,
-            param,
             queue);
     }
     virtual ~SemiGlobalMatchingImpl() {}
@@ -92,6 +82,7 @@ struct CudaStereoSGMResources
         int output_depth_bits_,
         int src_pitch_,
         int dst_pitch_,
+        Parameters params,
         cl_context ctx,
         cl_device_id device,
         cl_command_queue queue)
@@ -104,14 +95,14 @@ struct CudaStereoSGMResources
         , d_tmp_left_disp(ctx)
         , d_tmp_right_disp(ctx)
         , d_u8_out_disp(ctx)
-        , sgm_details(ctx, device)
+        , sgm_details(ctx, device, input_type(0))
     {
         if (disparity_size_ == 64)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 64>>(ctx, device);
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 64>>(ctx, device, width_, height_, src_pitch_, dst_pitch_, params);
         else if (disparity_size_ == 128)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 128>>(ctx, device);
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 128>>(ctx, device, width_, height_, src_pitch_, dst_pitch_, params);
         else if (disparity_size_ == 256)
-            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 256>>(ctx, device);
+            sgm_engine = std::make_unique<SemiGlobalMatchingImpl<input_type, 256>>(ctx, device, width_, height_, src_pitch_, dst_pitch_, params);
         else
             throw std::logic_error("depth bits must be 8 or 16, and disparity size must be 64 or 128");
 
@@ -237,6 +228,7 @@ StereoSGM<input_type>::StereoSGM(int width,
         output_depth_bits,
         src_pitch,
         dst_pitch,
+        m_params,
         m_cl_ctx,
         m_cl_device,
         m_cl_cmd_queue);
@@ -316,11 +308,6 @@ void StereoSGM<input_type>::execute(cl_mem left_pixels, cl_mem right_pixels, cl_
         right_img,
         m_cu_res->d_feature_buffer_left,
         m_cu_res->d_feature_buffer_right,
-        m_width,
-        m_height,
-        m_src_pitch,
-        m_dst_pitch,
-        m_params,
         m_cl_cmd_queue);
 
     m_cu_res->sgm_details.median_filter(m_cu_res->d_tmp_left_disp,
