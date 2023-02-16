@@ -28,82 +28,40 @@ namespace sgm
 namespace cl
 {
 
-template <int DIRECTION, unsigned int MAX_DISPARITY>
 struct VerticalPathAggregation
 {
     static constexpr unsigned int WARP_SIZE = 32;
     static constexpr unsigned int BLOCK_SIZE = WARP_SIZE * 8u;
     static constexpr unsigned int DP_BLOCK_SIZE = 16u;
 
-    VerticalPathAggregation(cl_context ctx, cl_device_id device)
-        : m_cl_ctx(ctx)
-        , m_cl_device(device)
-    {
-        init();
-    }
-    ~VerticalPathAggregation()
-    {
-        if (m_kernel)
-        {
-            clReleaseKernel(m_kernel);
-            m_kernel = nullptr;
-        }
-    }
+    VerticalPathAggregation(
+        cl_context ctx, cl_device_id device, int direction, MaxDisparity max_disparity);
+    VerticalPathAggregation(const VerticalPathAggregation& o) = delete;
+    VerticalPathAggregation(VerticalPathAggregation&& o) = default;
+    VerticalPathAggregation& operator=(const VerticalPathAggregation& o) = delete;
+    VerticalPathAggregation& operator=(VerticalPathAggregation&& o) = default;
+    ~VerticalPathAggregation();
 
     DeviceProgram m_program;
     cl_context m_cl_ctx = nullptr;
     cl_device_id m_cl_device = nullptr;
     cl_kernel m_kernel = nullptr;
-    void enqueue(DeviceBuffer<cost_type> & dest,
-        const DeviceBuffer<feature_type> & left,
-        const DeviceBuffer<feature_type> & right,
+    int m_direction;
+    MaxDisparity m_max_disparity;
+    void enqueue(DeviceBuffer<uint8_t>& dest,
+        const DeviceBuffer<uint32_t>& left,
+        const DeviceBuffer<uint32_t>& right,
         int width,
         int height,
         unsigned int p1,
         unsigned int p2,
         int min_disp,
-        cl_command_queue stream)
-    {
-        cl_int err;
-        err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
-        err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
-        err = clSetKernelArg(m_kernel, 2, sizeof(cl_mem), &right.data());
-        err = clSetKernelArg(m_kernel, 3, sizeof(width), &width);
-        err = clSetKernelArg(m_kernel, 4, sizeof(height), &height);
-        err = clSetKernelArg(m_kernel, 5, sizeof(p1), &p1);
-        err = clSetKernelArg(m_kernel, 6, sizeof(p2), &p2);
-        err = clSetKernelArg(m_kernel, 7, sizeof(min_disp), &min_disp);
+        cl_command_queue stream);
 
-        static const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
-        static const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE / SUBGROUP_SIZE;
-
-        //setup kernels
-        const size_t gdim = (width + PATHS_PER_BLOCK - 1) / PATHS_PER_BLOCK;
-        const size_t bdim = BLOCK_SIZE;
-        //
-        size_t global_size[1] = { gdim * bdim };
-        size_t local_size[1] = { bdim };
-        err = clEnqueueNDRangeKernel(stream,
-            m_kernel,
-            1,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        CHECK_OCL_ERROR(err, "Error finishing queue");
-//        clFinish(stream);
-//        cv::Mat debug(height, width, CV_8UC4);
-//        clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
-//        cv::imshow("vertical path aggregation debug", debug);
-//        cv::waitKey(0);
-    }
-
+  private:
     void init();
-
 };
 
-
-template <int DIRECTION, unsigned int MAX_DISPARITY>
 struct HorizontalPathAggregation
 {
     static constexpr unsigned int WARP_SIZE = 32;
@@ -112,186 +70,116 @@ struct HorizontalPathAggregation
     static constexpr unsigned int WARPS_PER_BLOCK = 4u;
     static constexpr unsigned int BLOCK_SIZE = WARP_SIZE * WARPS_PER_BLOCK;
 
-
-    HorizontalPathAggregation(cl_context ctx, cl_device_id device)
-        : m_cl_ctx(ctx)
-        , m_cl_device(device)
-    {
-        init();
-    }
-    ~HorizontalPathAggregation()
-    {
-        if (m_kernel)
-        {
-            clReleaseKernel(m_kernel);
-            m_kernel = nullptr;
-        }
-    }
-    DeviceProgram m_program;
-    cl_context m_cl_ctx = nullptr;
-    cl_device_id m_cl_device = nullptr;
-    cl_kernel m_kernel = nullptr;
-    void enqueue(DeviceBuffer<cost_type>& dest,
-        const DeviceBuffer<feature_type>& left,
-        const DeviceBuffer<feature_type>& right,
+    HorizontalPathAggregation(
+        cl_context ctx, cl_device_id device, int direction, MaxDisparity max_disparity);
+    HorizontalPathAggregation(const HorizontalPathAggregation& o) = delete;
+    HorizontalPathAggregation(HorizontalPathAggregation&& o) = default;
+    HorizontalPathAggregation& operator=(const HorizontalPathAggregation& o) = delete;
+    HorizontalPathAggregation& operator=(HorizontalPathAggregation&& o) = default;
+    ~HorizontalPathAggregation();
+    void enqueue(DeviceBuffer<uint8_t>& dest,
+        const DeviceBuffer<uint32_t>& left,
+        const DeviceBuffer<uint32_t>& right,
         int width,
         int height,
         unsigned int p1,
         unsigned int p2,
         int min_disp,
-        cl_command_queue stream)
-    {
-        cl_int err;
-        err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
-        err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
-        err = clSetKernelArg(m_kernel, 2, sizeof(cl_mem), &right.data());
-        err = clSetKernelArg(m_kernel, 3, sizeof(width), &width);
-        err = clSetKernelArg(m_kernel, 4, sizeof(height), &height);
-        err = clSetKernelArg(m_kernel, 5, sizeof(p1), &p1);
-        err = clSetKernelArg(m_kernel, 6, sizeof(p2), &p2);
-        err = clSetKernelArg(m_kernel, 7, sizeof(min_disp), &min_disp);
+        cl_command_queue stream);
 
-        static const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
-        static const unsigned int PATHS_PER_BLOCK =
-            BLOCK_SIZE * DP_BLOCKS_PER_THREAD / SUBGROUP_SIZE;
-
-        //setup kernels
-        const size_t gdim = (height + PATHS_PER_BLOCK - 1) / PATHS_PER_BLOCK;
-        const size_t bdim = BLOCK_SIZE;
-        //
-        size_t global_size[1] = { gdim * bdim };
-        size_t local_size[1] = { bdim };
-        err = clEnqueueNDRangeKernel(stream,
-            m_kernel,
-            1,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        //cl_int errr = clFinish(stream);
-        //CHECK_OCL_ERROR(err, "Error finishing queue");
-        //cv::Mat debug(height, width, CV_8UC4);
-        //clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
-        //cv::imshow("horizontal path aggregation debug", debug);
-        //cv::waitKey(0);
-    }
-
+  private:
     void init();
 
+  private:
+    DeviceProgram m_program;
+    cl_context m_cl_ctx = nullptr;
+    cl_device_id m_cl_device = nullptr;
+    cl_kernel m_kernel = nullptr;
+    int m_direction;
+    MaxDisparity m_max_disparity;
 };
 
-
-template <int X_DIRECTION, int Y_DIRECTION, unsigned int MAX_DISPARITY>
 struct ObliquePathAggregation
 {
     static constexpr unsigned int WARP_SIZE = 32;
     static constexpr unsigned int DP_BLOCK_SIZE = 16u;
     static constexpr unsigned int BLOCK_SIZE = WARP_SIZE * 8u;
 
-    ObliquePathAggregation(cl_context ctx, cl_device_id device)
-        : m_cl_ctx(ctx)
-        , m_cl_device(device)
-    {
-        init();
-    }
-    ~ObliquePathAggregation()
-    {
-        if (m_kernel)
-        {
-            clReleaseKernel(m_kernel);
-            m_kernel = nullptr;
-        }
-    }
-    DeviceProgram m_program;
-    cl_context m_cl_ctx = nullptr;
-    cl_device_id m_cl_device = nullptr;
-    cl_kernel m_kernel = nullptr;
-    void enqueue(DeviceBuffer<cost_type>& dest,
-        const DeviceBuffer<feature_type>& left,
-        const DeviceBuffer<feature_type>& right,
+    ObliquePathAggregation(cl_context ctx,
+        cl_device_id device,
+        int x_direction,
+        int y_direction,
+        MaxDisparity max_disparity);
+    ObliquePathAggregation(const ObliquePathAggregation& o) = delete;
+    ObliquePathAggregation(ObliquePathAggregation&& o) = default;
+    ObliquePathAggregation& operator=(const ObliquePathAggregation& o) = delete;
+    ObliquePathAggregation& operator=(ObliquePathAggregation&& o) = default;
+    ~ObliquePathAggregation();
+    void enqueue(DeviceBuffer<uint8_t>& dest,
+        const DeviceBuffer<uint32_t>& left,
+        const DeviceBuffer<uint32_t>& right,
         int width,
         int height,
         unsigned int p1,
         unsigned int p2,
         int min_disp,
-        cl_command_queue stream)
-    {
-        cl_int err;
-        err = clSetKernelArg(m_kernel, 0, sizeof(cl_mem), &dest.data());
-        err = clSetKernelArg(m_kernel, 1, sizeof(cl_mem), &left.data());
-        err = clSetKernelArg(m_kernel, 2, sizeof(cl_mem), &right.data());
-        err = clSetKernelArg(m_kernel, 3, sizeof(width), &width);
-        err = clSetKernelArg(m_kernel, 4, sizeof(height), &height);
-        err = clSetKernelArg(m_kernel, 5, sizeof(p1), &p1);
-        err = clSetKernelArg(m_kernel, 6, sizeof(p2), &p2);
-        err = clSetKernelArg(m_kernel, 7, sizeof(min_disp), &min_disp);
+        cl_command_queue stream);
 
-         const unsigned int SUBGROUP_SIZE = MAX_DISPARITY / DP_BLOCK_SIZE;
-         const unsigned int PATHS_PER_BLOCK = BLOCK_SIZE / SUBGROUP_SIZE;
-
-        const unsigned gdim = (width + height + PATHS_PER_BLOCK - 2) / PATHS_PER_BLOCK;
-        const unsigned bdim = BLOCK_SIZE;
-        //
-        size_t global_size[1] = { gdim * bdim };
-        size_t local_size[1] = { bdim };
-        err = clEnqueueNDRangeKernel(stream,
-            m_kernel,
-            1,
-            nullptr,
-            global_size,
-            local_size,
-            0, nullptr, nullptr);
-        //cl_int errr = clFinish(stream);
-        //CHECK_OCL_ERROR(err, "Error finishing queue");
-        //cv::Mat debug(height, width, CV_8UC4);
-        //clEnqueueReadBuffer(stream, dest.data(), true, 0, width * height * 4, debug.data, 0, nullptr, nullptr);
-        //cv::imshow("horizontal path aggregation debug", debug);
-        //cv::waitKey(0);
-    }
-
+  private:
     void init();
 
+  private:
+    DeviceProgram m_program;
+    cl_context m_cl_ctx = nullptr;
+    cl_device_id m_cl_device = nullptr;
+    cl_kernel m_kernel = nullptr;
+    int m_x_direction;
+    int m_y_direction;
+    MaxDisparity m_max_disparity;
 };
 
-template <size_t MAX_DISPARITY>
-class PathAggregation 
+class PathAggregation
 {
-
-private:
+  private:
     static const unsigned int MAX_NUM_PATHS = 8;
 
-    DeviceBuffer<cost_type> m_cost_buffer;
-    std::vector<DeviceBuffer<cost_type>> m_sub_buffers;
+    DeviceBuffer<uint8_t> m_cost_buffer;
+    std::vector<DeviceBuffer<uint8_t>> m_sub_buffers;
     cl_command_queue m_streams[MAX_NUM_PATHS];
 
-public:
+  public:
     PathAggregation(cl_context ctx,
-        cl_device_id device, PathType path_type, int width, int height);
+        cl_device_id device,
+        PathType path_type,
+        MaxDisparity max_disparity,
+        int width,
+        int height);
     ~PathAggregation();
 
-    const DeviceBuffer<cost_type>& get_output() const;
+    const DeviceBuffer<uint8_t>& get_output() const;
 
-    void enqueue(
-        const DeviceBuffer<feature_type> & left,
-        const DeviceBuffer<feature_type>& right,
+    void enqueue(const DeviceBuffer<uint32_t>& left,
+        const DeviceBuffer<uint32_t>& right,
         unsigned int p1,
         unsigned int p2,
         int min_disp,
         cl_command_queue stream);
-private:
-    //opencl stuff
-    VerticalPathAggregation<-1, MAX_DISPARITY> m_down2up;
-    VerticalPathAggregation<1, MAX_DISPARITY> m_up2down;
-    HorizontalPathAggregation<-1, MAX_DISPARITY> m_right2left;
-    HorizontalPathAggregation<1, MAX_DISPARITY> m_left2right;
-    ObliquePathAggregation<1, 1, MAX_DISPARITY> m_upleft2downright;
-    ObliquePathAggregation<-1, 1, MAX_DISPARITY> m_upright2downleft;
-    ObliquePathAggregation<-1, -1, MAX_DISPARITY> m_downright2upleft;
-    ObliquePathAggregation<1, -1, MAX_DISPARITY> m_downleft2upright;
+
+  private:
+    // opencl stuff
+    VerticalPathAggregation m_down2up;
+    VerticalPathAggregation m_up2down;
+    HorizontalPathAggregation m_right2left;
+    HorizontalPathAggregation m_left2right;
+    ObliquePathAggregation m_upleft2downright;
+    ObliquePathAggregation m_upright2downleft;
+    ObliquePathAggregation m_downright2upleft;
+    ObliquePathAggregation m_downleft2upright;
     PathType m_path_type;
+    MaxDisparity m_max_disparity;
     int m_width;
     int m_height;
 };
 
-}
-}
+} // namespace cl
+} // namespace sgm

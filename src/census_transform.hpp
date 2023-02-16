@@ -10,8 +10,6 @@ namespace sgm
 {
 namespace cl
 {
-
-template <typename input_type>
 class CensusTransform
 {
     static constexpr unsigned int BLOCK_SIZE = 128;
@@ -22,12 +20,13 @@ class CensusTransform
 
 public:
     CensusTransform(cl_context ctx,
-        cl_device_id device);
+        cl_device_id device,
+        uint32_t input_bits);
     ~CensusTransform();
 
     void enqueue(
-        const DeviceBuffer<input_type> & src,
-        DeviceBuffer<feature_type>& feature_buffer,
+        const cl_mem src,
+        DeviceBuffer<uint32_t>& feature_buffer,
         int width,
         int height,
         int pitch,
@@ -41,19 +40,18 @@ private:
 };
 
 
-template<typename input_type>
-inline CensusTransform<input_type>::CensusTransform(cl_context ctx,
-    cl_device_id device)
+CensusTransform::CensusTransform(cl_context ctx,
+    cl_device_id device, uint32_t input_bits)
     : m_cl_ctx(ctx)
     , m_cl_device(device)
 {
     std::string kernel_template_types;
 
-    if (std::is_same<input_type, uint16_t>::value)
+    if (input_bits == 16)
     {
         kernel_template_types = "#define pixel_type uint16_t\n";
     }
-    else if (std::is_same<input_type, uint8_t>::value)
+    else if (input_bits == 8)
     {
         kernel_template_types = "#define pixel_type uint8_t\n";
     }
@@ -74,8 +72,7 @@ inline CensusTransform<input_type>::CensusTransform(cl_context ctx,
     
 }
 
-template<typename input_type>
-inline CensusTransform<input_type>::~CensusTransform()
+CensusTransform::~CensusTransform()
 {
     if (m_census_kernel)
     {
@@ -84,9 +81,8 @@ inline CensusTransform<input_type>::~CensusTransform()
     }
 }
 
-template<typename input_type>
-inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> & src,
-    DeviceBuffer<feature_type> & feature_buffer,
+void CensusTransform::enqueue(const cl_mem src,
+    DeviceBuffer<uint32_t> & feature_buffer,
     int width,
     int height,
     int pitch,
@@ -96,7 +92,7 @@ inline void CensusTransform<input_type>::enqueue(const DeviceBuffer<input_type> 
         0,
         sizeof(cl_mem),
         &feature_buffer.data());
-    err = clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &src.data());
+    err = clSetKernelArg(m_census_kernel, 1, sizeof(cl_mem), &src);
     err = clSetKernelArg(m_census_kernel, 2, sizeof(width), &width);
     err = clSetKernelArg(m_census_kernel, 3, sizeof(height), &height);
     err = clSetKernelArg(m_census_kernel, 4, sizeof(pitch), &pitch);

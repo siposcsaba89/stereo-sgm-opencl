@@ -1,0 +1,11 @@
+﻿---
+BasedOnStyle: Microsoft
+AlignAfterOpenBracket: DontAlign
+BinPackArguments: 'false'
+BinPackParameters: 'false'
+ColumnLimit: 100
+PointerAlignment: Left
+AlwaysBreakTemplateDeclarations: Yes
+SortIncludes: false
+BreakConstructorInitializers: BeforeComma 
+...

@@ -25,26 +25,21 @@ namespace sgm
 {
 namespace cl
 {
-
 class SGMDetails
 {
-public:
-    template<typename input_type>
-    SGMDetails(cl_context ctx, cl_device_id device, input_type input_t);
+  public:
+    SGMDetails(cl_context ctx, cl_device_id device, uint32_t input_bits);
     ~SGMDetails();
-    void median_filter(
-        const DeviceBuffer<uint16_t>& d_src,
+    void median_filter(const DeviceBuffer<uint16_t>& d_src,
         const DeviceBuffer<uint16_t>& d_dst,
         int width,
         int height,
         int pitch,
         cl_command_queue stream);
 
-    template <typename input_type>
-    void check_consistency(
-        DeviceBuffer<uint16_t>& d_left_disp,
+    void check_consistency(DeviceBuffer<uint16_t>& d_left_disp,
         const DeviceBuffer<uint16_t>& d_right_disp,
-        const DeviceBuffer<input_type>& d_src_left,
+        const cl_mem d_src_left,
         int width,
         int height,
         int src_pitch,
@@ -62,12 +57,14 @@ public:
         cl_command_queue stream);
 
     void cast_16bit_8bit_array(const DeviceBuffer<uint16_t>& arr16bits,
-        DeviceBuffer<uint8_t> & arr8bits,
+        DeviceBuffer<uint8_t>& arr8bits,
         int num_elements,
         cl_command_queue stream);
-private:
+
+  private:
     void initDispRangeCorrection();
-private:
+
+  private:
     cl_context m_cl_context = nullptr;
     cl_device_id m_cl_device_id = nullptr;
 
@@ -79,12 +76,11 @@ private:
     cl_kernel m_kernel_disp_corr = nullptr;
     cl_kernel m_kernel_cast_16uto8u = nullptr;
 
-private:
+  private:
     static constexpr unsigned int WARP_SIZE = 32;
     static constexpr unsigned int WARPS_PER_BLOCK = 8u;
     static constexpr unsigned int BLOCK_SIZE = WARPS_PER_BLOCK * WARP_SIZE;
 };
 
-}
-
-}
+} // namespace cl
+} // namespace sgm

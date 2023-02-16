@@ -24,13 +24,8 @@ namespace sgm
 {
 namespace cl
 {
-
-template <typename input_type, size_t MAX_DISPARITY>
 class SemiGlobalMatching
 {
-public:
-    using output_type = sgm::cl::output_type;
-
 private:
     class Impl;
     std::unique_ptr<Impl> m_impl;
@@ -38,20 +33,22 @@ private:
 public:
     SemiGlobalMatching(cl_context context,
         cl_device_id device,
+        MaxDisparity max_disparity,
         int width,
         int height,
         int src_pitch,
         int dst_pitch,
+        int input_bits,
         const Parameters& param);
     ~SemiGlobalMatching();
 
     void enqueue(
-        DeviceBuffer<output_type>& dest_left,
-        DeviceBuffer<output_type>& dest_right,
-        const DeviceBuffer<input_type> & src_left,
-        const DeviceBuffer<input_type> & src_right,
-        DeviceBuffer<feature_type>& feature_buffer_left,
-        DeviceBuffer<feature_type>& feature_buffer_right,
+        DeviceBuffer<uint16_t>& dest_left,
+        DeviceBuffer<uint16_t>& dest_right,
+        const cl_mem src_left,
+        const cl_mem src_right,
+        DeviceBuffer<uint32_t>& feature_buffer_left,
+        DeviceBuffer<uint32_t>& feature_buffer_right,
         cl_command_queue stream);
 };
 

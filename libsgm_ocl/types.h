@@ -19,25 +19,33 @@ limitations under the License.
 
 #include <cstdint>
 
-namespace sgm {
+namespace sgm
+{
 
 namespace cl
 {
-
-using feature_type = uint32_t;
-using cost_type = uint8_t;
-using cost_sum_type = uint16_t;
-using output_type = uint16_t;
-
 /**
  Indicates number of scanlines which will be used.
 */
-enum class PathType {
-    SCAN_4PATH, //>! Horizontal and vertical paths.
-    SCAN_8PATH  //>! Horizontal, vertical and oblique paths.
+enum class PathType : uint8_t
+{
+    SCAN_4PATH = 4, //>! Horizontal and vertical paths.
+    SCAN_8PATH = 8  //>! Horizontal, vertical and oblique paths.
+};
+enum class MaxDisparity : uint16_t
+{
+    MAX_DISP_64 = 64,
+    MAX_DISP_128 = 128,
+    MAX_DISP_256 = 256
 };
 
-}
-}
+enum class DispPrecision : uint8_t
+{
+    INTEGER = 0,
+    SUBPIXEL = 1
+};
+
+} // namespace cl
+} // namespace sgm
 
 #endif

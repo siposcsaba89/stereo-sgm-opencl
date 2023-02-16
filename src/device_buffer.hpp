@@ -20,14 +20,13 @@ limitations under the License.
 #include <CL/cl.h>
 #include <iostream>
 
-#define CHECK_OCL_ERROR(err, msg) \
-    if (err != CL_SUCCESS) \
-    { \
-        std::cout << "OCL_ERROR at line " << __LINE__ << ". Message: " << msg << std::endl; \
-    }\
+#define CHECK_OCL_ERROR(err, msg)                                                                  \
+    if (err != CL_SUCCESS)                                                                         \
+    {                                                                                              \
+        std::cout << "OCL_ERROR at line " << __LINE__ << ". Message: " << msg << std::endl;        \
+    }
 
-
-namespace sgm 
+namespace sgm
 {
 namespace cl
 {
@@ -35,13 +34,14 @@ namespace cl
 template <typename value_type>
 class DeviceBuffer
 {
-public:
+  public:
     DeviceBuffer(cl_context ctx = nullptr)
         : m_cl_ctx(ctx)
         , m_data(nullptr)
         , m_size(0)
         , m_owns_data(false)
-    { }
+    {
+    }
 
     explicit DeviceBuffer(cl_context ctx, size_t n)
         : m_cl_ctx(ctx)
@@ -78,12 +78,13 @@ public:
         obj.m_size = 0;
     }
 
-    ~DeviceBuffer() {
+    ~DeviceBuffer()
+    {
         destroy();
     }
 
-
-    void allocate(size_t n) {
+    void allocate(size_t n)
+    {
         if (m_data && m_size >= n)
             return;
 
@@ -124,7 +125,8 @@ public:
 
     DeviceBuffer& operator=(const DeviceBuffer&) = delete;
 
-    DeviceBuffer& operator=(DeviceBuffer&& obj) {
+    DeviceBuffer& operator=(DeviceBuffer&& obj)
+    {
         m_data = obj.m_data;
         m_size = obj.m_size;
         obj.m_data = nullptr;
@@ -132,11 +134,12 @@ public:
         return *this;
     }
 
-    size_t size() const {
+    size_t size() const
+    {
         return m_size;
     }
 
-    cl_mem & data()
+    cl_mem& data()
     {
         return m_data;
     }
@@ -145,13 +148,13 @@ public:
     {
         return m_data;
     }
-private:
+
+  private:
     cl_context m_cl_ctx = nullptr;
     cl_mem m_data = nullptr;
     size_t m_size = 0;
     bool m_owns_data = false;
 };
 
-}
-}
-
+} // namespace cl
+} // namespace sgm

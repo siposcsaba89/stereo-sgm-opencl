@@ -25,12 +25,16 @@ namespace sgm
 {
 namespace cl
 {
-
-template <size_t MAX_DISPARITY>
-class WinnerTakesAll 
+class WinnerTakesAll
 {
-public:
-    WinnerTakesAll(cl_context ctx, cl_device_id device, PathType path_type, bool subpixel, int pitch, int height);
+  public:
+    WinnerTakesAll(cl_context ctx,
+        cl_device_id device,
+        MaxDisparity max_disparity,
+        PathType path_type,
+        DispPrecision precision,
+        int pitch,
+        int height);
 
     const DeviceBuffer<uint16_t>& get_left_output() const
     {
@@ -42,16 +46,14 @@ public:
         return m_right_buffer;
     }
 
-    void enqueue(
-        const DeviceBuffer<uint8_t>& src,
+    void enqueue(const DeviceBuffer<uint8_t>& src,
         int width,
         int height,
         int pitch,
         float uniqueness,
         cl_command_queue stream);
 
-    void enqueue(
-        DeviceBuffer<uint16_t>& left,
+    void enqueue(DeviceBuffer<uint16_t>& left,
         DeviceBuffer<uint16_t>& right,
         const DeviceBuffer<uint8_t>& src,
         int width,
@@ -59,7 +61,8 @@ public:
         int pitch,
         float uniqueness,
         cl_command_queue stream);
-private:
+
+  private:
     DeviceBuffer<uint16_t> m_left_buffer;
     DeviceBuffer<uint16_t> m_right_buffer;
     cl_context m_cl_context = nullptr;
@@ -67,12 +70,12 @@ private:
 
     DeviceProgram m_program;
     cl_kernel m_kernel = nullptr;
-private:
+
+  private:
     static constexpr unsigned int WARP_SIZE = 32;
     static constexpr unsigned int WARPS_PER_BLOCK = 8u;
     static constexpr unsigned int BLOCK_SIZE = WARPS_PER_BLOCK * WARP_SIZE;
 };
 
-}
-
-}
+} // namespace cl
+} // namespace sgm
