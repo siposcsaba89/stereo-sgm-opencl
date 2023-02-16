@@ -71,6 +71,15 @@ int main(int argc, char* argv[])
     left_capture >> left;
     right_capture >> right;
 
+    auto convertTo4size = [](const cv::Mat& m) -> cv::Mat {
+        int new_size_x = (m.cols / 4) * 4;
+        int new_size_y = (m.rows / 4) * 4;
+        cv::Mat ret = m(cv::Rect(0, 0, new_size_x, new_size_y)).clone();
+        return ret;
+    };
+    left = convertTo4size(left);
+    right = convertTo4size(right);
+
     if (left.size() != right.size() || left.type() != right.type())
     {
         std::cerr << "mismatch input image size" << std::endl;
@@ -125,12 +134,16 @@ int main(int argc, char* argv[])
         while ((!should_close))
         {
             left_capture.read(img1c);
+            img1c = convertTo4size(img1c);
+
             if (img1c.empty())
             {
                 std::cout << "Failed to read left image stream!" << std::endl;
                 break;
             }
             right_capture.read(img2c);
+            img2c = convertTo4size(img2c);
+
             if (img2c.empty())
             {
                 std::cout << "Failed to read right image stream!" << std::endl;
